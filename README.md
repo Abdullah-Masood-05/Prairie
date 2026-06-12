@@ -18,5 +18,44 @@ The local Tauri application utilizes `bisond` (or `bisond.exe` on Windows) as a 
 
 ## Tested Version
 
-This build has been tested and verified against the following BisonDB version:
-- **BisonDB Commit**: [69bc41b](https://github.com/Abdullah-Masood-05/Bisondb/commit/69bc41ba59346ccfb5f9d92efb1de14ca5529fbf) (`feat: add integration tests for createCollection and dbStats methods`)
+This build is tested and verified against:
+
+- **BisonDB v1.0.0** (wire protocol **v1** — Prairie checks `serverStatus.protocolVersion` on
+  connect and blocks the workspace with a clear mismatch screen if it differs).
+
+## Develop & test
+
+```bat
+bun install
+bun run copy-sidecar     # needs BISONDB_BUILD_DIR (env or .env.local)
+bun run tauri dev
+```
+
+`bun run test` (Vitest: JsonTree, filter store, $set-diff, api validation), `bun run lint`
+(ESLint), `cargo test` in `src-tauri/` (wire framing, truncated-find reassembly,
+import/export converters incl. CSV). CI runs all of these plus a tag-triggered
+(`v*`) Windows job that runs the full `bun run tauri build` and attaches the installer to a
+GitHub Release.
+
+## Screenshots
+
+| Connection | Document browser | Explain plans |
+|---|---|---|
+| ![Connection](docs/screenshot-connection.png) | ![Browser](docs/screenshot-browser.png) | ![Explain](docs/screenshot-explain.png) |
+
+*(placeholders — drop PNGs into `docs/`)*
+
+## Known limitations
+
+- **Edits are `$set`-only.** The edit modal computes changed top-level fields and sends
+  `updateOne` with `$set`; removing a top-level key is rejected with a hint (wire protocol v1
+  has no removal operator).
+- **find caps at 10,000 documents** client-side to protect the UI.
+- **No authentication, no TLS** — BisonDB binds to loopback by default and Prairie is a
+  localhost/trusted-network tool. Do not expose bisond to untrusted networks.
+- Recent connections are stored unencrypted in the OS appData directory
+  (`recent-connections.json`).
+
+## License
+
+MIT — see [LICENSE](LICENSE). Changes per release in [CHANGELOG.md](CHANGELOG.md).

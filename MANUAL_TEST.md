@@ -2,6 +2,40 @@
 
 Setup: build the engine, `bun run copy-sidecar`, `bun run tauri dev`.
 
+## v1.0.0 release walk — 2026-06-13
+
+Automated layers all pass on this machine against bisond v1.0.0
+(mingw-release build):
+
+- [x] `bun run test` — 18/18 Vitest
+- [x] `bun run lint` — clean
+- [x] `bun run build` — TypeScript strict + Vite clean
+- [x] `cargo test` — 6/6 (framing, truncated find, converters incl. CSV)
+- [x] Engine suite — 171/171 (includes createCollection/dbStats/protocolVersion)
+
+The interactive items below must be walked by hand in `tauri dev` before
+tagging; mark each box. Previously verified during development: import/export
+(json/jsonl/bson + csv export), explain scan→index_range flip on zips,
+delete confirmations.
+
+## Sidecar lifecycle (release-blocking)
+- [ ] Open a local database; confirm a bisond.exe child appears in Task Manager
+- [ ] Disconnect: the child exits
+- [ ] Open a local database again, then close the app WINDOW (X button): the
+      child exits within ~2s (RunEvent::Exit reaper)
+- [ ] Open a local database, quit via the app menu/Alt-F4: child exits
+
+## Protocol mismatch (release-blocking)
+- [ ] Connect to a pre-1.0 bisond (or one with protocolVersion patched != 1):
+      a blocking "Incompatible server protocol" screen appears instead of the
+      workspace; Disconnect returns to the connection screen
+- [ ] Connect to bisond v1.0.0: workspace loads normally
+
+## Recents storage
+- [ ] Recent connections survive an app restart
+- [ ] `recent-connections.json` exists under the OS appData dir (e.g.
+      %APPDATA%\com.bisondb.prairie on Windows) — NOT in webview localStorage
+
 ## Connection
 - [ ] Connect to a running bisond (host/port) — banner shows label + version
 - [ ] Wrong port shows an inline error on the card (not a crash)
