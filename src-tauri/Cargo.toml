@@ -1,0 +1,28 @@
+[package]
+name = "prairie"
+version = "0.1.0"
+description = "BisonDB Prairie - desktop GUI client for BisonDB"
+authors = ["BisonDB"]
+edition = "2021"
+
+[lib]
+name = "prairie_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["net", "io-util", "time", "sync", "macros", "rt-multi-thread", "process"] }
+bson = "2"
+thiserror = "2"
+rfd = "0.15"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
