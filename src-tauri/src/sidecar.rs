@@ -3,17 +3,40 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::time::Duration;
 
 use tokio::process::{Child, Command};
-use tokio::sync::Mutex;
 
 use crate::client::{BisonConnection, ClientError};
 
+/// Tracks spawned bisond children. A std (not tokio) Mutex so the kill path
+/// also works synchronously from the tauri RunEvent::Exit handler — that is
+/// what reaps sidecars when the window is closed.
 #[derive(Default)]
 pub struct SidecarManager {
-    /// connection id -> child process serving it
-    pub children: Mutex<HashMap<u64, Child>>,
+    children: Mutex<HashMap<u64, Child>>,
+}
+
+impl SidecarManager {
+    pub fn track(&self, conn_id: u64, child: Child) {
+        self.children.lock().unwrap().insert(conn_id, child);
+    }
+
+    pub fn kill(&self, conn_id: u64) {
+        if let Some(mut child) = self.children.lock().unwrap().remove(&conn_id) {
+            let _ = child.start_kill();
+        }
+    }
+
+    /// Kills every tracked sidecar; called on app exit.
+    pub fn kill_all(&self) {
+        let mut children = self.children.lock().unwrap();
+        for (_, child) in children.iter_mut() {
+            let _ = child.start_kill();
+        }
+        children.clear();
+    }
 }
 
 /// Finds the bundled bisond binary: BISOND_PATH env override, next to the

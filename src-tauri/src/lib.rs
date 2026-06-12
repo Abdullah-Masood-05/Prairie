@@ -35,7 +35,17 @@ pub fn run() {
             commands::compact,
             commands::import_file,
             commands::export_file,
+            commands::load_recents,
+            commands::save_recents,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Prairie");
+        .build(tauri::generate_context!())
+        .expect("error while building Prairie")
+        .run(|app, event| {
+            // Window-close ends up here as Exit: reap every bisond sidecar so
+            // closing the app never leaks server processes.
+            if let tauri::RunEvent::Exit = event {
+                use tauri::Manager;
+                app.state::<SidecarManager>().kill_all();
+            }
+        });
 }
