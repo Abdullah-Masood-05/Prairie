@@ -25,23 +25,25 @@ fn doc_to_json(d: &Document) -> serde_json::Value {
     Bson::Document(d.clone()).into_relaxed_extjson()
 }
 
+/// Wire-protocol revision this build of Prairie speaks.
+pub const SUPPORTED_PROTOCOL: i32 = 1;
+
 #[derive(Serialize)]
 pub struct ConnectionInfo {
     pub conn_id: u64,
     pub label: String,
     pub server_version: String,
     pub local: bool,
+    pub protocol_version: i32,
+    pub protocol_supported: bool,
 }
 
-async fn describe(
-    conn: &mut BisonConnection,
-    local: bool,
-) -> Result<(String, String), ClientError> {
+async fn describe(conn: &mut BisonConnection) -> Result<(String, i32), ClientError> {
     let status = conn.command(doc! {"cmd": "serverStatus"}).await?;
     let version = status.get_str("version").unwrap_or("?").to_string();
-    let label = format!("{}:{}", conn.host, conn.port);
-    let _ = local;
-    Ok((label, version))
+    // Servers older than BisonDB 1.0.0 do not report protocolVersion.
+    let protocol = status.get_i32("protocolVersion").unwrap_or(0);
+    Ok((version, protocol))
 }
 
 #[tauri::command]
@@ -53,9 +55,17 @@ pub async fn connect_remote(
     let mut conn = BisonConnection::connect(&host, port, std::time::Duration::from_secs(5))
         .await
         .map_err(err)?;
-    let (label, server_version) = describe(&mut conn, false).await.map_err(err)?;
+    let (server_version, protocol_version) = describe(&mut conn).await.map_err(err)?;
+    let label = format!("{host}:{port}");
     let conn_id = manager.register(conn).await;
-    Ok(ConnectionInfo { conn_id, label, server_version, local: false })
+    Ok(ConnectionInfo {
+        conn_id,
+        label,
+        server_version,
+        local: false,
+        protocol_version,
+        protocol_supported: protocol_version == SUPPORTED_PROTOCOL,
+    })
 }
 
 #[tauri::command]
@@ -73,10 +83,17 @@ pub async fn open_local(
         }
     }
     let (child, mut conn, _port) = sidecar::start_local(&path).await.map_err(err)?;
-    let (_, server_version) = describe(&mut conn, true).await.map_err(err)?;
+    let (server_version, protocol_version) = describe(&mut conn).await.map_err(err)?;
     let conn_id = manager.register(conn).await;
-    sidecars.children.lock().await.insert(conn_id, child);
-    Ok(ConnectionInfo { conn_id, label: path, server_version, local: true })
+    sidecars.track(conn_id, child);
+    Ok(ConnectionInfo {
+        conn_id,
+        label: path,
+        server_version,
+        local: true,
+        protocol_version,
+        protocol_supported: protocol_version == SUPPORTED_PROTOCOL,
+    })
 }
 
 #[tauri::command]
@@ -86,10 +103,34 @@ pub async fn disconnect(
     sidecars: State<'_, SidecarManager>,
 ) -> CmdResult<()> {
     manager.remove(conn_id).await;
-    if let Some(mut child) = sidecars.children.lock().await.remove(&conn_id) {
-        let _ = child.kill().await;
-    }
+    sidecars.kill(conn_id);
     Ok(())
+}
+
+// ---- recent-connections persistence (tauri appData, not localStorage) -----
+
+fn recents_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    use tauri::Manager;
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("recent-connections.json"))
+}
+
+#[tauri::command]
+pub async fn load_recents(app: tauri::AppHandle) -> CmdResult<serde_json::Value> {
+    let path = recents_path(&app)?;
+    if !path.exists() {
+        return Ok(serde_json::Value::Array(vec![]));
+    }
+    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    serde_json::from_str(&text).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn save_recents(app: tauri::AppHandle, recents: serde_json::Value) -> CmdResult<()> {
+    let path = recents_path(&app)?;
+    std::fs::write(path, serde_json::to_string_pretty(&recents).unwrap())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

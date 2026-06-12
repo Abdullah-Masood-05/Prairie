@@ -5,6 +5,10 @@ export interface ConnectionInfo {
   label: string;
   server_version: string;
   local: boolean;
+  // Wire-protocol revision reported by serverStatus (0 = pre-1.0 server
+  // that does not report one). Prairie blocks the workspace on mismatch.
+  protocol_version: number;
+  protocol_supported: boolean;
 }
 
 export type BsonScalar = string | number | boolean | null;
