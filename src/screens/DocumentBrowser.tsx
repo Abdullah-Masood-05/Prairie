@@ -18,6 +18,19 @@ import { toastError, toastSuccess } from '../components/Toast';
 
 const PAGE = 20;
 
+// Normalizes @tauri-apps/plugin-dialog results: depending on version, open()
+// resolves to a string path, a FileResponse object ({ path, ... }), or an
+// array of either. null = cancelled.
+function dialogPath(result: unknown): string | null {
+  if (typeof result === 'string') return result;
+  if (Array.isArray(result)) return result.length > 0 ? dialogPath(result[0]) : null;
+  if (result !== null && typeof result === 'object' && 'path' in result) {
+    const p = (result as { path: unknown }).path;
+    return typeof p === 'string' ? p : null;
+  }
+  return null;
+}
+
 function oidOf(doc: BsonDocument): string {
   const id = doc._id;
   if (id !== null && typeof id === 'object' && '$oid' in (id as object)) {
@@ -164,10 +177,22 @@ export default function DocumentBrowser({ coll }: { coll: string }) {
   };
 
   const doImport = async () => {
-    const path = await openDialog({
-      filters: [{ name: 'Data', extensions: ['bson', 'json', 'jsonl'] }],
-    });
-    if (typeof path !== 'string') return;
+    let path: string | null = null;
+    try {
+      const result = await openDialog({
+        filters: [{ name: 'Data', extensions: ['bson', 'json', 'jsonl'] }],
+      });
+      if (result === null) return; // cancelled
+      path = dialogPath(result);
+      if (path === null) {
+        toastError(`unexpected file dialog result: ${JSON.stringify(result)}`);
+        return;
+      }
+    } catch (e) {
+      toastError(e); // e.g. missing dialog capability
+      return;
+    }
+    if (path === null) return;
     setImportProgress(0);
     const unlisten = await listen<{ done: number; total: number }>('import-progress', (e) =>
       setImportProgress(e.payload.total ? e.payload.done / e.payload.total : 0),
@@ -188,10 +213,20 @@ export default function DocumentBrowser({ coll }: { coll: string }) {
   };
 
   const doExport = async () => {
-    const path = await saveDialog({
-      defaultPath: `${coll}.${exportFormat === 'bson' ? 'bson' : exportFormat}`,
-    });
-    if (typeof path !== 'string') return;
+    let path: string | null = null;
+    try {
+      const result = await saveDialog({ defaultPath: `${coll}.${exportFormat}` });
+      if (result === null) return; // cancelled
+      path = dialogPath(result);
+      if (path === null) {
+        toastError(`unexpected save dialog result: ${JSON.stringify(result)}`);
+        return;
+      }
+    } catch (e) {
+      toastError(e);
+      return;
+    }
+    if (path === null) return;
     try {
       const filter = exportScope === 'filter' ? state.filter : '{}';
       const n = await api.exportFile(connId, coll, filter, path, exportFormat);
@@ -386,7 +421,7 @@ export default function DocumentBrowser({ coll }: { coll: string }) {
           <div>
             <h2 className="mb-2 flex items-center gap-1 font-medium"><Download size={14} /> Export</h2>
             <div className="mb-2 flex gap-3">
-              {(['json', 'jsonl', 'bson'] as const).map((f) => (
+              {(['json', 'jsonl', 'bson', 'csv'] as const).map((f) => (
                 <label key={f} className="flex items-center gap-1">
                   <input type="radio" checked={exportFormat === f} onChange={() => setExportFormat(f)} /> {f}
                 </label>

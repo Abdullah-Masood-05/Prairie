@@ -48,9 +48,24 @@ export default function ConnectionScreen() {
   };
 
   const pickFolder = async (create: boolean) => {
-    const folder = await open({ directory: true, title: create ? 'Create database folder' : 'Open database folder' });
-    if (typeof folder === 'string') {
-      await openLocal(folder, create);
+    try {
+      const result = await open({
+        directory: true,
+        title: create ? 'Create database folder' : 'Open database folder',
+      });
+      // Depending on the dialog plugin version the result may be a string or
+      // an object with a `path` field.
+      const folder =
+        typeof result === 'string'
+          ? result
+          : result !== null && typeof result === 'object' && 'path' in result
+            ? String((result as { path: string }).path)
+            : null;
+      if (folder !== null) {
+        await openLocal(folder, create);
+      }
+    } catch (e) {
+      setLocalError(String(e instanceof Error ? e.message : e));
     }
   };
 
