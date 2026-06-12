@@ -52,7 +52,8 @@ export interface ImportSummary {
   errors: string[];
 }
 
-export type ExportFormat = 'json' | 'jsonl' | 'bson';
+// csv is export-only (top-level fields become columns).
+export type ExportFormat = 'json' | 'jsonl' | 'bson' | 'csv';
 
 export interface RecentConnection {
   kind: 'remote' | 'local';

@@ -105,11 +105,65 @@ pub async fn import_documents(
     Ok(summary)
 }
 
+/// Renders one BSON value as a CSV cell: scalars plain, ObjectId as hex,
+/// everything nested as compact relaxed Extended JSON.
+fn csv_cell(value: &Bson) -> String {
+    match value {
+        Bson::String(s) => s.clone(),
+        Bson::Int32(n) => n.to_string(),
+        Bson::Int64(n) => n.to_string(),
+        Bson::Double(d) => d.to_string(),
+        Bson::Boolean(b) => b.to_string(),
+        Bson::Null => String::new(),
+        Bson::ObjectId(oid) => oid.to_hex(),
+        other => other.clone().into_relaxed_extjson().to_string(),
+    }
+}
+
+/// RFC 4180 quoting: quote cells containing comma/quote/newline, doubling
+/// embedded quotes.
+fn csv_escape(cell: &str) -> String {
+    if cell.contains(',') || cell.contains('"') || cell.contains('\n') || cell.contains('\r') {
+        format!("\"{}\"", cell.replace('"', "\"\""))
+    } else {
+        cell.to_string()
+    }
+}
+
+fn write_csv(file: &mut std::fs::File, docs: &[Document]) -> Result<(), ClientError> {
+    // Header: union of top-level keys in first-appearance order, _id first.
+    let mut columns: Vec<String> = Vec::new();
+    for d in docs {
+        for key in d.keys() {
+            if !columns.iter().any(|c| c == key) {
+                columns.push(key.clone());
+            }
+        }
+    }
+    if let Some(at) = columns.iter().position(|c| c == "_id") {
+        let id = columns.remove(at);
+        columns.insert(0, id);
+    }
+    let header: Vec<String> = columns.iter().map(|c| csv_escape(c)).collect();
+    writeln!(file, "{}", header.join(","))?;
+    for d in docs {
+        let row: Vec<String> = columns
+            .iter()
+            .map(|c| d.get(c).map(csv_cell).unwrap_or_default())
+            .map(|cell| csv_escape(&cell))
+            .collect();
+        writeln!(file, "{}", row.join(","))?;
+    }
+    Ok(())
+}
+
 /// Writes documents in the chosen format: "json" (pretty array), "jsonl"
-/// (one relaxed Extended JSON doc per line), or "bson" (concatenated).
+/// (one relaxed Extended JSON doc per line), "bson" (concatenated), or
+/// "csv" (top-level fields as columns, nested values as compact JSON).
 pub fn write_documents(path: &Path, docs: &[Document], format: &str) -> Result<(), ClientError> {
     let mut file = std::fs::File::create(path)?;
     match format {
+        "csv" => write_csv(&mut file, docs)?,
         "bson" => {
             for d in docs {
                 file.write_all(&bson::to_vec(d)?)?;
@@ -153,6 +207,26 @@ mod tests {
         let json = dir.join("fixture.json");
         write_documents(&json, &docs, "json").unwrap();
         assert_eq!(read_documents(&json).unwrap()[0].get_i32("a").unwrap(), 1);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn csv_export_quotes_and_orders_columns() {
+        let docs = vec![
+            doc! {"name": "a,b", "n": 1i32, "_id": bson::oid::ObjectId::parse_str(
+                "507f1f77bcf86cd799439011").unwrap()},
+            doc! {"name": "say \"hi\"", "extra": {"nested": true}},
+        ];
+        let dir = std::env::temp_dir().join("prairie_csv_test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("out.csv");
+        write_documents(&path, &docs, "csv").unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines[0], "_id,name,n,extra"); // _id first, then appearance order
+        assert_eq!(lines[1], "507f1f77bcf86cd799439011,\"a,b\",1,");
+        // Nested JSON cells contain quotes, so they get RFC 4180 quoting too.
+        assert_eq!(lines[2], ",\"say \"\"hi\"\"\",,\"{\"\"nested\"\":true}\"");
         std::fs::remove_dir_all(&dir).ok();
     }
 
