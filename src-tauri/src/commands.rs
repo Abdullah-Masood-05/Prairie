@@ -70,6 +70,7 @@ pub async fn connect_remote(
 
 #[tauri::command]
 pub async fn open_local(
+    app: tauri::AppHandle,
     path: String,
     create_if_missing: bool,
     manager: State<'_, ConnectionManager>,
@@ -82,7 +83,7 @@ pub async fn open_local(
             return Err(format!("database folder does not exist: {path}"));
         }
     }
-    let (child, mut conn, _port) = sidecar::start_local(&path).await.map_err(err)?;
+    let (child, mut conn, _port) = sidecar::start_local(&app, &path).await.map_err(err)?;
     let (server_version, protocol_version) = describe(&mut conn).await.map_err(err)?;
     let conn_id = manager.register(conn).await;
     sidecars.track(conn_id, child);

@@ -39,31 +39,74 @@ impl SidecarManager {
     }
 }
 
-/// Finds the bundled bisond binary: BISOND_PATH env override, next to the
-/// app executable, then the dev-time src-tauri/bin/ copy.
-pub fn bisond_path() -> Result<PathBuf, ClientError> {
+/// Finds the bundled bisond binary across dev and bundled layouts. Order:
+/// BISOND_PATH override → Tauri resource dir (production, `bin/*` resource) →
+/// paths derived from the running executable (dev: the exe is at
+/// `src-tauri/target/<profile>/`, so `../../bin/` reaches `src-tauri/bin/`) →
+/// working-directory fallbacks.
+pub fn bisond_path(app: &tauri::AppHandle) -> Result<PathBuf, ClientError> {
+    use tauri::Manager;
+
     let name = if cfg!(windows) { "bisond.exe" } else { "bisond" };
-    if let Ok(env) = std::env::var("BISOND_PATH") {
-        let p = PathBuf::from(env);
+    let mut tried: Vec<PathBuf> = Vec::new();
+    let check = |p: PathBuf, tried: &mut Vec<PathBuf>| -> Option<PathBuf> {
         if p.exists() {
+            Some(p)
+        } else {
+            tried.push(p);
+            None
+        }
+    };
+
+    if let Ok(env) = std::env::var("BISOND_PATH") {
+        if let Some(p) = check(PathBuf::from(env), &mut tried) {
             return Ok(p);
         }
     }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let p = dir.join(name);
-            if p.exists() {
+
+    // Production: declared as a `bin/*` resource in tauri.conf.json.
+    if let Ok(res) = app.path().resource_dir() {
+        for cand in [res.join("bin").join(name), res.join(name)] {
+            if let Some(p) = check(cand, &mut tried) {
                 return Ok(p);
             }
         }
     }
-    let dev = PathBuf::from("bin").join(name);
-    if dev.exists() {
-        return Ok(dev);
+
+    // Relative to the running executable.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            for cand in [
+                dir.join(name),                       // flat bundle: next to the exe
+                dir.join("bin").join(name),           // bin/ beside the exe
+                dir.join("../../bin").join(name),     // dev: target/<profile>/ → src-tauri/bin
+                dir.join("../../../bin").join(name),  // dev safety net for deeper nesting
+            ] {
+                if let Some(p) = check(cand, &mut tried) {
+                    return Ok(p);
+                }
+            }
+        }
     }
-    Err(ClientError::Other(
-        "bisond binary not found (set BISOND_PATH or run the copy-sidecar script)".into(),
-    ))
+
+    // Working-directory fallbacks (covers `tauri dev` cwd = project root).
+    for cand in [
+        PathBuf::from("bin").join(name),
+        PathBuf::from("src-tauri").join("bin").join(name),
+    ] {
+        if let Some(p) = check(cand, &mut tried) {
+            return Ok(p);
+        }
+    }
+
+    let searched = tried
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect::<Vec<_>>()
+        .join("\n  ");
+    Err(ClientError::Other(format!(
+        "bisond binary not found. Set BISOND_PATH, or run `bun run copy-sidecar`. Searched:\n  {searched}"
+    )))
 }
 
 /// Picks a free ephemeral port by binding to :0 and releasing it.
@@ -74,8 +117,11 @@ fn free_port() -> Result<u16, ClientError> {
 
 /// Spawns bisond for `db_dir`, waits until it answers ping (~2s of retries),
 /// and returns (child, connected client, port).
-pub async fn start_local(db_dir: &str) -> Result<(Child, BisonConnection, u16), ClientError> {
-    let binary = bisond_path()?;
+pub async fn start_local(
+    app: &tauri::AppHandle,
+    db_dir: &str,
+) -> Result<(Child, BisonConnection, u16), ClientError> {
+    let binary = bisond_path(app)?;
     let port = free_port()?;
     let child = Command::new(&binary)
         .args(["--dir", db_dir, "--port", &port.to_string(), "--quiet"])
