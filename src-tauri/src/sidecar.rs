@@ -123,9 +123,17 @@ pub async fn start_local(
 ) -> Result<(Child, BisonConnection, u16), ClientError> {
     let binary = bisond_path(app)?;
     let port = free_port()?;
-    let child = Command::new(&binary)
-        .args(["--dir", db_dir, "--port", &port.to_string(), "--quiet"])
-        .kill_on_drop(true)
+    let mut cmd = Command::new(&binary);
+    cmd.args(["--dir", db_dir, "--port", &port.to_string(), "--quiet"])
+        .kill_on_drop(true);
+    // bisond is a console-subsystem binary; without this flag Windows opens a
+    // visible console window for the sidecar. CREATE_NO_WINDOW suppresses it.
+    #[cfg(windows)]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    let child = cmd
         .spawn()
         .map_err(|e| ClientError::Other(format!("cannot start {}: {e}", binary.display())))?;
 

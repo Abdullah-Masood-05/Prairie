@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.0.2 — 2026-06-13
+
+Bugfix release.
+
+### Fixed
+- Opening a local database popped a visible `bisond.exe` console window on
+  Windows. The sidecar is now spawned with `CREATE_NO_WINDOW`, so it runs
+  silently in the background as intended.
+
 ## v1.0.1 — 2026-06-13
 
 Bugfix release.
