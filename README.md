@@ -53,4 +53,12 @@ Screenshots and a full feature tour live in the
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Changes per release in [CHANGELOG.md](CHANGELOG.md).
+Prairie's own code is **MIT** — see [LICENSE](LICENSE). Changes per release in
+[CHANGELOG.md](CHANGELOG.md).
+
+The installer bundles the BisonDB engine binary (`bisond`) as a sidecar. That binary is a
+separate program licensed under the **GNU GPL v3.0**
+([source and license](https://github.com/Abdullah-Masood-05/Bisondb)); Prairie communicates
+with it over a network socket as a distinct process, so the MIT and GPLv3 licenses apply to
+their respective parts independently. If you redistribute the Prairie installer, the bundled
+engine remains under GPLv3.
