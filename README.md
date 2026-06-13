@@ -37,11 +37,8 @@ import/export converters incl. CSV). CI runs all of these plus a tag-triggered
 (`v*`) Windows job that runs the full `bun run tauri build` and attaches the installer to a
 GitHub Release.
 
-## Screenshots
-
-| Connection | Document browser |
-|---|---|
-| ![Connection screen](docs/screenshot-connection.png) | ![Document browser](docs/screenshot-browser.png) |
+Screenshots and a full feature tour live in the
+[documentation site](https://abdullah-masood-05.github.io/bisondb-site/guide/prairie).
 
 ## Known limitations
 
