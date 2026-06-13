@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.0.3 — 2026-06-13
+
+### Changed
+- **Relicensed from MIT to GNU GPL v3.0-or-later.** Prairie now matches the BisonDB
+  engine's copyleft license; `LICENSE` holds the full GPLv3 text and every source file
+  carries the standard GPL notice header.
+
+### Added
+- The installer now ships the bundled engine's GPLv3 license text as `LICENSE-bisond.txt`
+  alongside `bisond` in the install directory.
+
 ## v1.0.2 — 2026-06-13
 
 Bugfix release.
