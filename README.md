@@ -4,8 +4,13 @@
   <p><strong>The desktop GUI for BisonDB, in the spirit of MongoDB Compass.</strong></p>
   <p>
     <a href="https://github.com/Abdullah-Masood-05/Prairie/actions/workflows/ci.yml"><img src="https://github.com/Abdullah-Masood-05/Prairie/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPLv3-blue.svg" alt="License: GPLv3" /></a>
-    <img src="https://img.shields.io/badge/Tauri-2-FFC131.svg" alt="Tauri 2" />
+    <a href="https://github.com/Abdullah-Masood-05/Prairie/releases/latest"><img src="https://img.shields.io/github/v/release/Abdullah-Masood-05/Prairie?style=flat-square" alt="Latest release" /></a>
+    <a href="https://github.com/Abdullah-Masood-05/Prairie/commits"><img src="https://img.shields.io/github/last-commit/Abdullah-Masood-05/Prairie?style=flat-square" alt="Last commit" /></a>
+    <a href="https://github.com/Abdullah-Masood-05/Prairie/stargazers"><img src="https://img.shields.io/github/stars/Abdullah-Masood-05/Prairie?style=flat-square" alt="Stars" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/github/license/Abdullah-Masood-05/Prairie?style=flat-square" alt="License" /></a>
+    <img src="https://img.shields.io/badge/Tauri-2.x-24C8DB?style=flat-square&logo=tauri&logoColor=white" alt="Tauri 2.x" />
+    <img src="https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React 18" />
+    <img src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript strict" />
   </p>
   <p>
     <a href="https://github.com/Abdullah-Masood-05/Bisondb">BisonDB engine</a> ·
