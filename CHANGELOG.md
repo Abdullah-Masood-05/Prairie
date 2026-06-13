@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.0.1 — 2026-06-13
+
+Bugfix release.
+
+### Fixed
+- Local database ("Open folder" / "Create new database") failed with
+  *"bisond binary not found"* because the sidecar resolver only checked a
+  working-directory-relative path. It now searches the Tauri resource
+  directory (the correct location in installed builds) and several
+  executable-relative paths, so local databases work in both `tauri dev`
+  and the packaged app. When the binary genuinely can't be found, the
+  error now lists every path that was searched.
+
 ## v1.0.0 — 2026-06-13
 
 First stable release, matching BisonDB v1.0.0 (wire protocol v1).
