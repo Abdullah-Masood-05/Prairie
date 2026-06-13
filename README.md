@@ -1,4 +1,17 @@
-# Prairie — a desktop GUI client for BisonDB, in the spirit of MongoDB Compass
+<div align="center">
+  <img src="assets/logo.png" alt="BisonDB Prairie logo" width="120" height="120" />
+  <h1>BisonDB Prairie</h1>
+  <p><strong>The desktop GUI for BisonDB, in the spirit of MongoDB Compass.</strong></p>
+  <p>
+    <a href="https://github.com/Abdullah-Masood-05/Prairie/actions/workflows/ci.yml"><img src="https://github.com/Abdullah-Masood-05/Prairie/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPLv3-blue.svg" alt="License: GPLv3" /></a>
+    <img src="https://img.shields.io/badge/Tauri-2-FFC131.svg" alt="Tauri 2" />
+  </p>
+  <p>
+    <a href="https://github.com/Abdullah-Masood-05/Bisondb">BisonDB engine</a> ·
+    <a href="https://abdullah-masood-05.github.io/bisondb-site/">Documentation</a>
+  </p>
+</div>
 
 Prairie is a modern, responsive cross-platform desktop GUI database client designed specifically for BisonDB.
 
