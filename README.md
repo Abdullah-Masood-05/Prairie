@@ -39,11 +39,9 @@ GitHub Release.
 
 ## Screenshots
 
-| Connection | Document browser | Explain plans |
-|---|---|---|
-| ![Connection](docs/screenshot-connection.png) | ![Browser](docs/screenshot-browser.png) | ![Explain](docs/screenshot-explain.png) |
-
-*(placeholders — drop PNGs into `docs/`)*
+| Connection | Document browser |
+|---|---|
+| ![Connection screen](docs/screenshot-connection.png) | ![Document browser](docs/screenshot-browser.png) |
 
 ## Known limitations
 
