@@ -47,6 +47,13 @@ export const toastIn: Variants = {
   exit: { opacity: 0, y: 8, scale: 0.98, transition: fast },
 };
 
+/** Tab panel: a small horizontal slide + fade (Documents / Indexes / I/O). */
+export const tabSlide: Variants = {
+  hidden: { opacity: 0, x: 14 },
+  visible: { opacity: 1, x: 0, transition: base },
+  exit: { opacity: 0, x: -14, transition: fast },
+};
+
 /**
  * Capped list stagger: the first `STAGGER_CAP` items cascade; everything after
  * lands together so a large list never produces a long visible wave.

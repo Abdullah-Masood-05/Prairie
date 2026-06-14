@@ -59,8 +59,8 @@ installer to a GitHub Release.
 
 **Design & motion.** A token layer (neutral surfaces + a single amber accent, radii,
 elevation, a type scale on Inter) keeps components cohesive, with a small framer-motion system
-for modals, toasts, route cross-fades, a capped list stagger, and skeleton loaders — all
-gated on `prefers-reduced-motion`. ⌘/Ctrl-K opens a command palette.
+for modals, toasts, route cross-fades, tab slide transitions, a capped list stagger, and
+skeleton loaders — all gated on `prefers-reduced-motion`. ⌘/Ctrl-K opens a command palette.
 
 Screenshots and a full feature tour live in the
 [documentation site](https://abdullah-masood-05.github.io/bisondb-site/guide/prairie).

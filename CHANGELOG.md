@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.2.1 — 2026-06-14
+
+### Fixed
+- **Logout crash.** Clicking *Log out* threw "Cannot read properties of null (reading
+  'conn_id')". The Part B route cross-fade keeps the workspace mounted for its exit
+  animation, during which the store connection is already null; the workspace and document
+  browser now read the connection defensively (and their queries are gated) so logout
+  animates out cleanly.
+
+### Added
+- A subtle **slide transition** when switching the Documents / Indexes / Import-Export tabs
+  (honors `prefers-reduced-motion`).
+
 ## v1.2.0 — 2026-06-14
 
 UI/UX elevation and motion — restraint over effects. No protocol change (still v2); the

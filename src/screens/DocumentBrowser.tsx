@@ -37,11 +37,11 @@ import { api, computeSetDiff } from '../api';
 import type { BsonDocument, ExportFormat } from '../api/types';
 import { canWrite, useConnectionStore } from '../stores/connection';
 import { useFiltersStore } from '../stores/filters';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { JsonTree, CopyDocButton } from '../components/JsonTree';
 import { Modal } from '../components/Modal';
 import { toastError, toastSuccess } from '../components/Toast';
-import { listItem } from '../lib/motion';
+import { listItem, tabSlide } from '../lib/motion';
 
 // Skeleton placeholders shaped like document cards, shown while a find runs.
 function DocSkeletons() {
@@ -91,9 +91,11 @@ function validJson(text: string): string | null {
 }
 
 export default function DocumentBrowser({ coll }: { coll: string }) {
-  const connId = useConnectionStore((s) => s.connection!.conn_id);
-  const writable = canWrite(useConnectionStore((s) => s.connection!.roles));
+  // Null-safe: survives the brief re-render during a logout cross-fade.
+  const connId = useConnectionStore((s) => s.connection?.conn_id ?? -1);
+  const writable = canWrite(useConnectionStore((s) => s.connection?.roles ?? []));
   const writeTip = 'requires write access';
+  const live = connId >= 0;
   const filters = useFiltersStore();
   const state = filters.get(coll);
   const queryClient = useQueryClient();
@@ -123,21 +125,22 @@ export default function DocumentBrowser({ coll }: { coll: string }) {
   const result = useQuery({
     queryKey: ['find', connId, coll, state.filter, state.page],
     queryFn: () => api.find(connId, coll, state.filter, PAGE, state.page * PAGE),
-    enabled: !filterError && !state.explainMode,
+    enabled: live && !filterError && !state.explainMode,
   });
   const total = useQuery({
     queryKey: ['count', connId, coll, state.filter],
     queryFn: () => api.count(connId, coll, state.filter),
-    enabled: !filterError,
+    enabled: live && !filterError,
   });
   const plan = useQuery({
     queryKey: ['explain', connId, coll, state.filter],
     queryFn: () => api.explain(connId, coll, state.filter, 0),
-    enabled: !filterError && state.explainMode,
+    enabled: live && !filterError && state.explainMode,
   });
   const indexes = useQuery({
     queryKey: ['indexes', connId, coll],
     queryFn: () => api.listIndexes(connId, coll),
+    enabled: live,
   });
 
   const filterFields = useMemo(() => {
@@ -317,249 +320,261 @@ export default function DocumentBrowser({ coll }: { coll: string }) {
         </button>
       </div>
 
-      {tab === 'documents' && (
-        <>
-          <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-2">
-            <div className="min-w-0 flex-1 rounded border border-zinc-700">
-              <CodeMirror
-                value={draftFilter}
-                onChange={setDraftFilter}
-                extensions={[json()]}
-                theme="dark"
-                basicSetup={{ lineNumbers: false, foldGutter: false }}
-                maxHeight="80px"
-                placeholder='{ field: { "$gt": ... } }'
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    if (!draftError) run();
-                  }
-                }}
-              />
-            </div>
-            <button
-              className="flex items-center gap-1 rounded bg-zinc-800 px-2 py-1.5 text-sm hover:bg-zinc-700 disabled:opacity-40"
-              disabled={!!draftError}
-              title={draftError ?? 'Run (Enter)'}
-              onClick={run}
-            >
-              <Play size={13} /> Run
-            </button>
-            <button
-              className="rounded px-2 py-1.5 text-sm text-zinc-400 hover:text-zinc-100"
-              onClick={reset}
-              title="Reset"
-            >
-              <RotateCcw size={13} />
-            </button>
-            <button
-              className={`flex items-center gap-1 rounded px-2 py-1.5 text-sm ${state.explainMode ? 'bg-amber-700' : 'bg-zinc-800 hover:bg-zinc-700'}`}
-              onClick={() => filters.setExplainMode(coll, !state.explainMode)}
-            >
-              <Zap size={13} /> Explain
-            </button>
-            {writable && (
-              <button
-                className="flex items-center gap-1 rounded bg-zinc-800 px-2 py-1.5 text-sm text-red-300 hover:bg-zinc-700"
-                onClick={() => setDeleteManyOpen(true)}
-              >
-                <Trash2 size={13} /> Delete matching
-              </button>
-            )}
-          </div>
-          {draftError && <div className="px-4 py-1 text-xs text-red-400">{draftError}</div>}
-
-          <div className="flex-1 overflow-y-auto px-4 py-2">
-            {state.explainMode ? (
-              plan.isLoading ? (
-                <p className="text-sm text-zinc-500">explaining…</p>
-              ) : plan.data ? (
-                <div className="space-y-2 text-sm">
-                  <span
-                    className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${
-                      plan.data.plan === 'scan'
-                        ? 'bg-red-900 text-red-200'
-                        : 'bg-emerald-900 text-emerald-200'
-                    }`}
-                  >
-                    {plan.data.plan}
-                    {plan.data.index ? ` on "${plan.data.index}"` : ''}
-                  </span>
-                  <p>
-                    examined <b>{plan.data.docsExamined}</b> · returned{' '}
-                    <b>{plan.data.docsReturned}</b>
-                  </p>
-                  {plan.data.plan === 'scan' && filterFields.length === 1 && (
-                    <p className="text-amber-400">
-                      Hint: create an index on "{filterFields[0]}" to speed this up (Indexes tab).
-                    </p>
-                  )}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={tab}
+          className="flex min-h-0 flex-1 flex-col"
+          variants={tabSlide}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+        >
+          {tab === 'documents' && (
+            <>
+              <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-2">
+                <div className="min-w-0 flex-1 rounded border border-zinc-700">
+                  <CodeMirror
+                    value={draftFilter}
+                    onChange={setDraftFilter}
+                    extensions={[json()]}
+                    theme="dark"
+                    basicSetup={{ lineNumbers: false, foldGutter: false }}
+                    maxHeight="80px"
+                    placeholder='{ field: { "$gt": ... } }'
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        if (!draftError) run();
+                      }
+                    }}
+                  />
                 </div>
-              ) : null
-            ) : result.isLoading ? (
-              <DocSkeletons />
-            ) : result.data && result.data.docs.length === 0 ? (
-              <div className="flex h-full flex-col items-center justify-center gap-2 text-zinc-500">
-                <p>No documents{state.filter !== '{}' ? ' match this filter' : ' yet'}.</p>
+                <button
+                  className="flex items-center gap-1 rounded bg-zinc-800 px-2 py-1.5 text-sm hover:bg-zinc-700 disabled:opacity-40"
+                  disabled={!!draftError}
+                  title={draftError ?? 'Run (Enter)'}
+                  onClick={run}
+                >
+                  <Play size={13} /> Run
+                </button>
+                <button
+                  className="rounded px-2 py-1.5 text-sm text-zinc-400 hover:text-zinc-100"
+                  onClick={reset}
+                  title="Reset"
+                >
+                  <RotateCcw size={13} />
+                </button>
+                <button
+                  className={`flex items-center gap-1 rounded px-2 py-1.5 text-sm ${state.explainMode ? 'bg-amber-700' : 'bg-zinc-800 hover:bg-zinc-700'}`}
+                  onClick={() => filters.setExplainMode(coll, !state.explainMode)}
+                >
+                  <Zap size={13} /> Explain
+                </button>
                 {writable && (
                   <button
-                    className="rounded bg-amber-600 px-3 py-1.5 text-sm text-zinc-50 hover:bg-amber-500"
-                    onClick={() => {
-                      setEditorText('{\n  \n}');
-                      setInsertOpen(true);
-                    }}
+                    className="flex items-center gap-1 rounded bg-zinc-800 px-2 py-1.5 text-sm text-red-300 hover:bg-zinc-700"
+                    onClick={() => setDeleteManyOpen(true)}
                   >
-                    Insert your first document
+                    <Trash2 size={13} /> Delete matching
                   </button>
                 )}
               </div>
-            ) : (
-              result.data?.docs.map((doc, i) => (
-                <motion.div
-                  key={oidOf(doc) || i}
-                  variants={listItem}
-                  initial="hidden"
-                  animate="visible"
-                  custom={i}
-                  className="group mb-2 rounded-lg border border-zinc-800 bg-zinc-900 p-2"
-                >
-                  <div className="mb-1 flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100">
-                    <CopyDocButton doc={doc} />
+              {draftError && <div className="px-4 py-1 text-xs text-red-400">{draftError}</div>}
+
+              <div className="flex-1 overflow-y-auto px-4 py-2">
+                {state.explainMode ? (
+                  plan.isLoading ? (
+                    <p className="text-sm text-zinc-500">explaining…</p>
+                  ) : plan.data ? (
+                    <div className="space-y-2 text-sm">
+                      <span
+                        className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${
+                          plan.data.plan === 'scan'
+                            ? 'bg-red-900 text-red-200'
+                            : 'bg-emerald-900 text-emerald-200'
+                        }`}
+                      >
+                        {plan.data.plan}
+                        {plan.data.index ? ` on "${plan.data.index}"` : ''}
+                      </span>
+                      <p>
+                        examined <b>{plan.data.docsExamined}</b> · returned{' '}
+                        <b>{plan.data.docsReturned}</b>
+                      </p>
+                      {plan.data.plan === 'scan' && filterFields.length === 1 && (
+                        <p className="text-amber-400">
+                          Hint: create an index on "{filterFields[0]}" to speed this up (Indexes
+                          tab).
+                        </p>
+                      )}
+                    </div>
+                  ) : null
+                ) : result.isLoading ? (
+                  <DocSkeletons />
+                ) : result.data && result.data.docs.length === 0 ? (
+                  <div className="flex h-full flex-col items-center justify-center gap-2 text-zinc-500">
+                    <p>No documents{state.filter !== '{}' ? ' match this filter' : ' yet'}.</p>
                     {writable && (
-                      <>
-                        <button
-                          title="Edit"
-                          className="text-zinc-500 hover:text-amber-400"
-                          onClick={() => {
-                            setEditorDoc(doc);
-                            setEditorText(JSON.stringify(doc, null, 2));
-                            setEditorError('');
-                          }}
-                        >
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          title="Delete"
-                          className="text-zinc-500 hover:text-red-400"
-                          onClick={() => setDeleteDoc(doc)}
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </>
+                      <button
+                        className="rounded bg-amber-600 px-3 py-1.5 text-sm text-zinc-50 hover:bg-amber-500"
+                        onClick={() => {
+                          setEditorText('{\n  \n}');
+                          setInsertOpen(true);
+                        }}
+                      >
+                        Insert your first document
+                      </button>
                     )}
                   </div>
-                  <JsonTree doc={doc} />
-                </motion.div>
-              ))
-            )}
-          </div>
+                ) : (
+                  result.data?.docs.map((doc, i) => (
+                    <motion.div
+                      key={oidOf(doc) || i}
+                      variants={listItem}
+                      initial="hidden"
+                      animate="visible"
+                      custom={i}
+                      className="group mb-2 rounded-lg border border-zinc-800 bg-zinc-900 p-2"
+                    >
+                      <div className="mb-1 flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100">
+                        <CopyDocButton doc={doc} />
+                        {writable && (
+                          <>
+                            <button
+                              title="Edit"
+                              className="text-zinc-500 hover:text-amber-400"
+                              onClick={() => {
+                                setEditorDoc(doc);
+                                setEditorText(JSON.stringify(doc, null, 2));
+                                setEditorError('');
+                              }}
+                            >
+                              <Pencil size={13} />
+                            </button>
+                            <button
+                              title="Delete"
+                              className="text-zinc-500 hover:text-red-400"
+                              onClick={() => setDeleteDoc(doc)}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                      <JsonTree doc={doc} />
+                    </motion.div>
+                  ))
+                )}
+              </div>
 
-          {!state.explainMode && (
-            <div className="flex items-center justify-between border-t border-zinc-800 px-4 py-1.5 text-xs text-zinc-400">
-              <span>
-                {result.data
-                  ? `returned ${result.data.count} in ${result.data.ms.toFixed(1)} ms`
-                  : ''}
-                {total.data !== undefined ? ` · ${total.data} total` : ''}
-              </span>
-              <span className="flex items-center gap-2">
+              {!state.explainMode && (
+                <div className="flex items-center justify-between border-t border-zinc-800 px-4 py-1.5 text-xs text-zinc-400">
+                  <span>
+                    {result.data
+                      ? `returned ${result.data.count} in ${result.data.ms.toFixed(1)} ms`
+                      : ''}
+                    {total.data !== undefined ? ` · ${total.data} total` : ''}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <button
+                      disabled={state.page === 0}
+                      onClick={() => filters.setPage(coll, state.page - 1)}
+                      className="disabled:opacity-30"
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+                    page {state.page + 1} / {totalPages}
+                    <button
+                      disabled={state.page + 1 >= totalPages}
+                      onClick={() => filters.setPage(coll, state.page + 1)}
+                      className="disabled:opacity-30"
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                  </span>
+                </div>
+              )}
+            </>
+          )}
+
+          {tab === 'indexes' && (
+            <IndexesTab
+              connId={connId}
+              coll={coll}
+              indexes={indexes.data ?? []}
+              writable={writable}
+              onChanged={invalidate}
+            />
+          )}
+
+          {tab === 'io' && (
+            <div className="space-y-6 p-4 text-sm">
+              <div>
+                <h2 className="mb-2 flex items-center gap-1 font-medium">
+                  <Upload size={14} /> Import
+                </h2>
                 <button
-                  disabled={state.page === 0}
-                  onClick={() => filters.setPage(coll, state.page - 1)}
-                  className="disabled:opacity-30"
+                  className="rounded bg-zinc-800 px-3 py-1.5 hover:bg-zinc-700 disabled:opacity-40"
+                  disabled={!writable}
+                  title={writable ? undefined : writeTip}
+                  onClick={doImport}
                 >
-                  <ChevronLeft size={14} />
+                  Choose file (.bson / .json / .jsonl)…
                 </button>
-                page {state.page + 1} / {totalPages}
+                {importProgress !== null && (
+                  <div className="mt-2 h-2 w-64 overflow-hidden rounded bg-zinc-800">
+                    <div
+                      className="h-full bg-amber-500"
+                      style={{ width: `${Math.round(importProgress * 100)}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+              <div>
+                <h2 className="mb-2 flex items-center gap-1 font-medium">
+                  <Download size={14} /> Export
+                </h2>
+                <div className="mb-2 flex gap-3">
+                  {(['json', 'jsonl', 'bson', 'csv'] as const).map((f) => (
+                    <label key={f} className="flex items-center gap-1">
+                      <input
+                        type="radio"
+                        checked={exportFormat === f}
+                        onChange={() => setExportFormat(f)}
+                      />{' '}
+                      {f}
+                    </label>
+                  ))}
+                </div>
+                <div className="mb-2 flex gap-3">
+                  <label className="flex items-center gap-1">
+                    <input
+                      type="radio"
+                      checked={exportScope === 'all'}
+                      onChange={() => setExportScope('all')}
+                    />{' '}
+                    all documents
+                  </label>
+                  <label className="flex items-center gap-1">
+                    <input
+                      type="radio"
+                      checked={exportScope === 'filter'}
+                      onChange={() => setExportScope('filter')}
+                    />{' '}
+                    current filter
+                  </label>
+                </div>
                 <button
-                  disabled={state.page + 1 >= totalPages}
-                  onClick={() => filters.setPage(coll, state.page + 1)}
-                  className="disabled:opacity-30"
+                  className="rounded bg-zinc-800 px-3 py-1.5 hover:bg-zinc-700"
+                  onClick={doExport}
                 >
-                  <ChevronRight size={14} />
+                  Export…
                 </button>
-              </span>
+              </div>
             </div>
           )}
-        </>
-      )}
-
-      {tab === 'indexes' && (
-        <IndexesTab
-          connId={connId}
-          coll={coll}
-          indexes={indexes.data ?? []}
-          writable={writable}
-          onChanged={invalidate}
-        />
-      )}
-
-      {tab === 'io' && (
-        <div className="space-y-6 p-4 text-sm">
-          <div>
-            <h2 className="mb-2 flex items-center gap-1 font-medium">
-              <Upload size={14} /> Import
-            </h2>
-            <button
-              className="rounded bg-zinc-800 px-3 py-1.5 hover:bg-zinc-700 disabled:opacity-40"
-              disabled={!writable}
-              title={writable ? undefined : writeTip}
-              onClick={doImport}
-            >
-              Choose file (.bson / .json / .jsonl)…
-            </button>
-            {importProgress !== null && (
-              <div className="mt-2 h-2 w-64 overflow-hidden rounded bg-zinc-800">
-                <div
-                  className="h-full bg-amber-500"
-                  style={{ width: `${Math.round(importProgress * 100)}%` }}
-                />
-              </div>
-            )}
-          </div>
-          <div>
-            <h2 className="mb-2 flex items-center gap-1 font-medium">
-              <Download size={14} /> Export
-            </h2>
-            <div className="mb-2 flex gap-3">
-              {(['json', 'jsonl', 'bson', 'csv'] as const).map((f) => (
-                <label key={f} className="flex items-center gap-1">
-                  <input
-                    type="radio"
-                    checked={exportFormat === f}
-                    onChange={() => setExportFormat(f)}
-                  />{' '}
-                  {f}
-                </label>
-              ))}
-            </div>
-            <div className="mb-2 flex gap-3">
-              <label className="flex items-center gap-1">
-                <input
-                  type="radio"
-                  checked={exportScope === 'all'}
-                  onChange={() => setExportScope('all')}
-                />{' '}
-                all documents
-              </label>
-              <label className="flex items-center gap-1">
-                <input
-                  type="radio"
-                  checked={exportScope === 'filter'}
-                  onChange={() => setExportScope('filter')}
-                />{' '}
-                current filter
-              </label>
-            </div>
-            <button
-              className="rounded bg-zinc-800 px-3 py-1.5 hover:bg-zinc-700"
-              onClick={doExport}
-            >
-              Export…
-            </button>
-          </div>
-        </div>
-      )}
+        </motion.div>
+      </AnimatePresence>
 
       <Modal
         open={insertOpen || editorDoc !== null}

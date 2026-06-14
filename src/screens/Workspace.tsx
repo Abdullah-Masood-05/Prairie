@@ -64,14 +64,17 @@ export default function Workspace() {
   const [usersOpen, setUsersOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
-  const connId = connection!.conn_id;
-  const roles = connection!.roles;
+  // Null-safe: during a logout cross-fade this component stays mounted for the
+  // exit animation while `connection` is already null. -1 is never a live id.
+  const connId = connection?.conn_id ?? -1;
+  const roles = connection?.roles ?? [];
   const writable = canWrite(roles);
   const admin = isAdmin(roles);
   const writeTip = 'requires write access';
   const stats = useQuery({
     queryKey: ['dbStats', connId],
     queryFn: () => api.dbStats(connId),
+    enabled: connId >= 0,
     refetchInterval: 10_000,
   });
 
@@ -186,6 +189,10 @@ export default function Workspace() {
     });
     return items;
   }, [stats.data, writable, admin]);
+
+  // After logout the store clears while the exit animation still plays; render
+  // nothing rather than dereference a null connection in the JSX below.
+  if (!connection) return null;
 
   return (
     <div className="flex h-full">
