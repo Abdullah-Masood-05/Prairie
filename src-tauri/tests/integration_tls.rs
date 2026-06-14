@@ -62,6 +62,13 @@ fn parse_fingerprint(line: &str) -> Option<String> {
 
 #[tokio::test]
 async fn tls_auth_crud_against_real_bisond() {
+    // Opt-in: this spawns a real, platform-native bisond. CI checks out a
+    // (Windows) sidecar binary that can't run on a Linux runner, so the test is
+    // gated behind PRAIRIE_E2E to keep the default `cargo test` portable.
+    if std::env::var("PRAIRIE_E2E").is_err() {
+        eprintln!("skipping TLS e2e (set PRAIRIE_E2E=1 with a runnable bisond to enable)");
+        return;
+    }
     let Some(binary) = bisond_binary() else {
         eprintln!("skipping: bisond binary not found (set BISOND_PATH or copy-sidecar)");
         return;
