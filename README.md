@@ -38,8 +38,9 @@ The local Tauri application utilizes `bisond` (or `bisond.exe` on Windows) as a 
 
 This build is tested and verified against:
 
-- **BisonDB v1.0.0** (wire protocol **v1** — Prairie checks `serverStatus.protocolVersion` on
-  connect and blocks the workspace with a clear mismatch screen if it differs).
+- **BisonDB v1.2.0** (wire protocol **v2** — Prairie checks `serverStatus.protocolVersion` on
+  connect and blocks the workspace with a clear mismatch screen if it differs). Protocol v2
+  adds authentication and TLS, so Prairie 1.1.0 requires a **BisonDB 1.1.0-or-newer** server.
 
 ## Develop & test
 
@@ -64,10 +65,13 @@ Screenshots and a full feature tour live in the
   `updateOne` with `$set`; removing a top-level key is rejected with a hint (wire protocol v1
   has no removal operator).
 - **find caps at 10,000 documents** client-side to protect the UI.
-- **No authentication, no TLS** — BisonDB binds to loopback by default and Prairie is a
-  localhost/trusted-network tool. Do not expose bisond to untrusted networks.
-- Recent connections are stored unencrypted in the OS appData directory
-  (`recent-connections.json`).
+- **Authentication & TLS are supported** (protocol v2): log in with a username/password,
+  and connect over TLS (verify against system trust, a CA/self-signed cert, or a pinned
+  fingerprint). Session tokens live only in the Rust backend, never in web storage.
+  Remaining gap: the server's TLS is 1.2 (1.3 pending), and it is still single-node.
+- Recent connections are stored in the OS appData directory
+  (`recent-connections.json`) and may include a remembered **username** and TLS
+  preferences — **never** passwords or tokens.
 
 ## License
 

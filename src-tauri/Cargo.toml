@@ -1,6 +1,6 @@
 [package]
 name = "prairie"
-version = "1.0.3"
+version = "1.1.0"
 description = "BisonDB Prairie - desktop GUI client for BisonDB"
 authors = ["BisonDB"]
 license = "GPL-3.0-or-later"

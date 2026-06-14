@@ -1,5 +1,32 @@
 # Changelog
 
+## v1.1.0 — 2026-06-14
+
+Sync with BisonDB v1.1.0+ (tested against v1.2.0): **authentication and TLS**. Prairie now
+speaks **wire protocol v2** and requires a BisonDB 1.1.0-or-newer server.
+
+### Added
+
+- **TLS transport.** Connect over TLS with the server's verification modes — system trust,
+  a CA / self-signed cert file, a SHA-256 fingerprint pin, or an explicit (and loudly
+  flagged) insecure skip. A lock indicator in the workspace header shows
+  encrypted&verified / encrypted-unverified / plaintext. Local databases run the bundled
+  sidecar over a self-signed cert whose fingerprint is pinned automatically, so they are
+  encrypted **and** verified with no login.
+- **Authentication.** A login step appears when the server requires auth; a first-run setup
+  screen bootstraps the first admin. Session tokens are held only in the Rust backend
+  (never in web-accessible storage); the client transparently re-authenticates on token
+  expiry.
+- **User management (admin).** A Users panel to list, create (with role), reset passwords,
+  and drop users.
+- **Role-aware UI.** Read-only users have insert/edit/delete/index/import controls hidden
+  or disabled.
+
+### Changed
+
+- Wire protocol bumped to **v2**; the version-mismatch screen now expects it. Recent
+  connections remember username and TLS preferences — **never** passwords or tokens.
+
 ## v1.0.3 — 2026-06-13
 
 ### Changed
