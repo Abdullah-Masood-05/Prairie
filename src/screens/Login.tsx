@@ -121,7 +121,11 @@ export default function LoginScreen() {
           onKeyDown={(e) => e.key === 'Enter' && !busy && login()}
         />
         <label className="mb-3 flex items-center gap-2 text-xs text-zinc-400">
-          <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={remember}
+            onChange={(e) => setRemember(e.target.checked)}
+          />
           Remember username
         </label>
         {error && <p className="mb-2 text-xs text-red-400">{error}</p>}

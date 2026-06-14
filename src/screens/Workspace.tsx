@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Database,
@@ -35,6 +35,7 @@ import { canWrite, isAdmin, useConnectionStore } from '../stores/connection';
 import { toastError, toastSuccess } from '../components/Toast';
 import { Modal } from '../components/Modal';
 import { UsersModal } from '../components/UsersModal';
+import { CommandPalette, type Command } from '../components/CommandPalette';
 import DocumentBrowser from './DocumentBrowser';
 
 // Lock indicator for the workspace header.
@@ -53,8 +54,7 @@ function LockBadge({ tls }: { tls: TlsState }) {
 }
 
 export default function Workspace() {
-  const { connection, selectedCollection, selectCollection, setConnection } =
-    useConnectionStore();
+  const { connection, selectedCollection, selectCollection, setConnection } = useConnectionStore();
   const queryClient = useQueryClient();
   const [newCollOpen, setNewCollOpen] = useState(false);
   const [newCollName, setNewCollName] = useState('');
@@ -62,6 +62,7 @@ export default function Workspace() {
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [dropConfirm, setDropConfirm] = useState('');
   const [usersOpen, setUsersOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   const connId = connection!.conn_id;
   const roles = connection!.roles;
@@ -130,6 +131,62 @@ export default function Workspace() {
     }
   };
 
+  // ⌘/Ctrl-K toggles the command palette.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const commands = useMemo<Command[]>(() => {
+    const colls = stats.data?.collections ?? [];
+    const items: Command[] = colls.map((c) => ({
+      id: `coll:${c.name}`,
+      label: c.name,
+      group: 'collection',
+      icon: <Database size={14} />,
+      run: () => selectCollection(c.name),
+    }));
+    items.push({
+      id: 'refresh',
+      label: 'Refresh collections',
+      group: 'action',
+      icon: <RefreshCw size={14} />,
+      run: refreshAll,
+    });
+    if (writable) {
+      items.push({
+        id: 'new-coll',
+        label: 'New collection',
+        group: 'action',
+        icon: <Plus size={14} />,
+        run: () => setNewCollOpen(true),
+      });
+    }
+    if (admin) {
+      items.push({
+        id: 'users',
+        label: 'Manage users',
+        group: 'action',
+        icon: <Users size={14} />,
+        run: () => setUsersOpen(true),
+      });
+    }
+    items.push({
+      id: 'disconnect',
+      label: 'Disconnect',
+      group: 'action',
+      icon: <LogOut size={14} />,
+      run: disconnect,
+    });
+    return items;
+  }, [stats.data, writable, admin]);
+
   return (
     <div className="flex h-full">
       <aside className="flex w-64 flex-col border-r border-zinc-800 bg-zinc-900">
@@ -160,7 +217,11 @@ export default function Workspace() {
               <Users size={15} />
             </button>
           )}
-          <button title="Disconnect" onClick={disconnect} className="text-zinc-400 hover:text-zinc-100">
+          <button
+            title="Disconnect"
+            onClick={disconnect}
+            className="text-zinc-400 hover:text-zinc-100"
+          >
             <LogOut size={15} />
           </button>
         </div>
@@ -181,7 +242,13 @@ export default function Workspace() {
           </span>
         </div>
         <div className="flex-1 overflow-y-auto">
-          {stats.isLoading && <div className="p-3 text-xs text-zinc-500">loading…</div>}
+          {stats.isLoading && (
+            <div className="space-y-1 p-2">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="skeleton h-6 w-full" style={{ opacity: 1 - i * 0.13 }} />
+              ))}
+            </div>
+          )}
           {stats.data?.collections.map((c) => (
             <div
               key={c.name}
@@ -254,7 +321,11 @@ export default function Workspace() {
         </button>
       </Modal>
 
-      <Modal open={dropTarget !== null} title={`Drop "${dropTarget}"?`} onClose={() => setDropTarget(null)}>
+      <Modal
+        open={dropTarget !== null}
+        title={`Drop "${dropTarget}"?`}
+        onClose={() => setDropTarget(null)}
+      >
         <p className="mb-2 text-sm text-zinc-400">
           This permanently deletes the collection and its indexes. Type the collection name to
           confirm.
@@ -282,6 +353,12 @@ export default function Workspace() {
           onClose={() => setUsersOpen(false)}
         />
       )}
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        commands={commands}
+      />
     </div>
   );
 }

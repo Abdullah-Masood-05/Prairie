@@ -22,16 +22,41 @@ import { json } from '@codemirror/lang-json';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { listen } from '@tauri-apps/api/event';
 import {
-  ChevronLeft, ChevronRight, Download, FilePlus2, Pencil, Play, RotateCcw,
-  Trash2, Upload, Zap,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  FilePlus2,
+  Pencil,
+  Play,
+  RotateCcw,
+  Trash2,
+  Upload,
+  Zap,
 } from 'lucide-react';
 import { api, computeSetDiff } from '../api';
 import type { BsonDocument, ExportFormat } from '../api/types';
 import { canWrite, useConnectionStore } from '../stores/connection';
 import { useFiltersStore } from '../stores/filters';
+import { motion } from 'framer-motion';
 import { JsonTree, CopyDocButton } from '../components/JsonTree';
 import { Modal } from '../components/Modal';
 import { toastError, toastSuccess } from '../components/Toast';
+import { listItem } from '../lib/motion';
+
+// Skeleton placeholders shaped like document cards, shown while a find runs.
+function DocSkeletons() {
+  return (
+    <div className="space-y-2">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
+          <div className="skeleton mb-2 h-3 w-1/3" />
+          <div className="skeleton mb-1.5 h-3 w-2/3" />
+          <div className="skeleton h-3 w-1/2" />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 const PAGE = 20;
 
@@ -161,7 +186,12 @@ export default function DocumentBrowser({ coll }: { coll: string }) {
       return;
     }
     try {
-      await api.updateOne(connId, coll, JSON.stringify({ _id: editorDoc._id }), JSON.stringify(set));
+      await api.updateOne(
+        connId,
+        coll,
+        JSON.stringify({ _id: editorDoc._id }),
+        JSON.stringify(set),
+      );
       toastSuccess(`updated ${Object.keys(set).length} field(s)`);
       setEditorDoc(null);
       setEditorError('');
@@ -315,7 +345,11 @@ export default function DocumentBrowser({ coll }: { coll: string }) {
             >
               <Play size={13} /> Run
             </button>
-            <button className="rounded px-2 py-1.5 text-sm text-zinc-400 hover:text-zinc-100" onClick={reset} title="Reset">
+            <button
+              className="rounded px-2 py-1.5 text-sm text-zinc-400 hover:text-zinc-100"
+              onClick={reset}
+              title="Reset"
+            >
               <RotateCcw size={13} />
             </button>
             <button
@@ -343,14 +377,17 @@ export default function DocumentBrowser({ coll }: { coll: string }) {
                 <div className="space-y-2 text-sm">
                   <span
                     className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${
-                      plan.data.plan === 'scan' ? 'bg-red-900 text-red-200' : 'bg-emerald-900 text-emerald-200'
+                      plan.data.plan === 'scan'
+                        ? 'bg-red-900 text-red-200'
+                        : 'bg-emerald-900 text-emerald-200'
                     }`}
                   >
                     {plan.data.plan}
                     {plan.data.index ? ` on "${plan.data.index}"` : ''}
                   </span>
                   <p>
-                    examined <b>{plan.data.docsExamined}</b> · returned <b>{plan.data.docsReturned}</b>
+                    examined <b>{plan.data.docsExamined}</b> · returned{' '}
+                    <b>{plan.data.docsReturned}</b>
                   </p>
                   {plan.data.plan === 'scan' && filterFields.length === 1 && (
                     <p className="text-amber-400">
@@ -360,7 +397,7 @@ export default function DocumentBrowser({ coll }: { coll: string }) {
                 </div>
               ) : null
             ) : result.isLoading ? (
-              <p className="text-sm text-zinc-500">loading…</p>
+              <DocSkeletons />
             ) : result.data && result.data.docs.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-2 text-zinc-500">
                 <p>No documents{state.filter !== '{}' ? ' match this filter' : ' yet'}.</p>
@@ -378,7 +415,14 @@ export default function DocumentBrowser({ coll }: { coll: string }) {
               </div>
             ) : (
               result.data?.docs.map((doc, i) => (
-                <div key={oidOf(doc) || i} className="group mb-2 rounded border border-zinc-800 bg-zinc-900 p-2">
+                <motion.div
+                  key={oidOf(doc) || i}
+                  variants={listItem}
+                  initial="hidden"
+                  animate="visible"
+                  custom={i}
+                  className="group mb-2 rounded-lg border border-zinc-800 bg-zinc-900 p-2"
+                >
                   <div className="mb-1 flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100">
                     <CopyDocButton doc={doc} />
                     {writable && (
@@ -394,14 +438,18 @@ export default function DocumentBrowser({ coll }: { coll: string }) {
                         >
                           <Pencil size={13} />
                         </button>
-                        <button title="Delete" className="text-zinc-500 hover:text-red-400" onClick={() => setDeleteDoc(doc)}>
+                        <button
+                          title="Delete"
+                          className="text-zinc-500 hover:text-red-400"
+                          onClick={() => setDeleteDoc(doc)}
+                        >
                           <Trash2 size={13} />
                         </button>
                       </>
                     )}
                   </div>
                   <JsonTree doc={doc} />
-                </div>
+                </motion.div>
               ))
             )}
           </div>
@@ -409,11 +457,17 @@ export default function DocumentBrowser({ coll }: { coll: string }) {
           {!state.explainMode && (
             <div className="flex items-center justify-between border-t border-zinc-800 px-4 py-1.5 text-xs text-zinc-400">
               <span>
-                {result.data ? `returned ${result.data.count} in ${result.data.ms.toFixed(1)} ms` : ''}
+                {result.data
+                  ? `returned ${result.data.count} in ${result.data.ms.toFixed(1)} ms`
+                  : ''}
                 {total.data !== undefined ? ` · ${total.data} total` : ''}
               </span>
               <span className="flex items-center gap-2">
-                <button disabled={state.page === 0} onClick={() => filters.setPage(coll, state.page - 1)} className="disabled:opacity-30">
+                <button
+                  disabled={state.page === 0}
+                  onClick={() => filters.setPage(coll, state.page - 1)}
+                  className="disabled:opacity-30"
+                >
                   <ChevronLeft size={14} />
                 </button>
                 page {state.page + 1} / {totalPages}
@@ -443,7 +497,9 @@ export default function DocumentBrowser({ coll }: { coll: string }) {
       {tab === 'io' && (
         <div className="space-y-6 p-4 text-sm">
           <div>
-            <h2 className="mb-2 flex items-center gap-1 font-medium"><Upload size={14} /> Import</h2>
+            <h2 className="mb-2 flex items-center gap-1 font-medium">
+              <Upload size={14} /> Import
+            </h2>
             <button
               className="rounded bg-zinc-800 px-3 py-1.5 hover:bg-zinc-700 disabled:opacity-40"
               disabled={!writable}
@@ -454,28 +510,51 @@ export default function DocumentBrowser({ coll }: { coll: string }) {
             </button>
             {importProgress !== null && (
               <div className="mt-2 h-2 w-64 overflow-hidden rounded bg-zinc-800">
-                <div className="h-full bg-amber-500" style={{ width: `${Math.round(importProgress * 100)}%` }} />
+                <div
+                  className="h-full bg-amber-500"
+                  style={{ width: `${Math.round(importProgress * 100)}%` }}
+                />
               </div>
             )}
           </div>
           <div>
-            <h2 className="mb-2 flex items-center gap-1 font-medium"><Download size={14} /> Export</h2>
+            <h2 className="mb-2 flex items-center gap-1 font-medium">
+              <Download size={14} /> Export
+            </h2>
             <div className="mb-2 flex gap-3">
               {(['json', 'jsonl', 'bson', 'csv'] as const).map((f) => (
                 <label key={f} className="flex items-center gap-1">
-                  <input type="radio" checked={exportFormat === f} onChange={() => setExportFormat(f)} /> {f}
+                  <input
+                    type="radio"
+                    checked={exportFormat === f}
+                    onChange={() => setExportFormat(f)}
+                  />{' '}
+                  {f}
                 </label>
               ))}
             </div>
             <div className="mb-2 flex gap-3">
               <label className="flex items-center gap-1">
-                <input type="radio" checked={exportScope === 'all'} onChange={() => setExportScope('all')} /> all documents
+                <input
+                  type="radio"
+                  checked={exportScope === 'all'}
+                  onChange={() => setExportScope('all')}
+                />{' '}
+                all documents
               </label>
               <label className="flex items-center gap-1">
-                <input type="radio" checked={exportScope === 'filter'} onChange={() => setExportScope('filter')} /> current filter
+                <input
+                  type="radio"
+                  checked={exportScope === 'filter'}
+                  onChange={() => setExportScope('filter')}
+                />{' '}
+                current filter
               </label>
             </div>
-            <button className="rounded bg-zinc-800 px-3 py-1.5 hover:bg-zinc-700" onClick={doExport}>
+            <button
+              className="rounded bg-zinc-800 px-3 py-1.5 hover:bg-zinc-700"
+              onClick={doExport}
+            >
               Export…
             </button>
           </div>
@@ -497,7 +576,13 @@ export default function DocumentBrowser({ coll }: { coll: string }) {
           </p>
         )}
         <div className="mb-2 rounded border border-zinc-700">
-          <CodeMirror value={editorText} onChange={setEditorText} extensions={[json()]} theme="dark" minHeight="200px" />
+          <CodeMirror
+            value={editorText}
+            onChange={setEditorText}
+            extensions={[json()]}
+            theme="dark"
+            minHeight="200px"
+          />
         </div>
         {editorError && <p className="mb-2 text-xs text-red-400">{editorError}</p>}
         <button
@@ -510,13 +595,22 @@ export default function DocumentBrowser({ coll }: { coll: string }) {
       </Modal>
 
       <Modal open={deleteDoc !== null} title="Delete document?" onClose={() => setDeleteDoc(null)}>
-        <p className="mb-3 break-all font-mono text-xs text-zinc-400">_id: {deleteDoc ? oidOf(deleteDoc) : ''}</p>
-        <button className="rounded bg-red-700 px-3 py-1.5 text-sm hover:bg-red-600" onClick={doDelete}>
+        <p className="mb-3 break-all font-mono text-xs text-zinc-400">
+          _id: {deleteDoc ? oidOf(deleteDoc) : ''}
+        </p>
+        <button
+          className="rounded bg-red-700 px-3 py-1.5 text-sm hover:bg-red-600"
+          onClick={doDelete}
+        >
           Delete
         </button>
       </Modal>
 
-      <Modal open={deleteManyOpen} title="Delete matching documents?" onClose={() => setDeleteManyOpen(false)}>
+      <Modal
+        open={deleteManyOpen}
+        title="Delete matching documents?"
+        onClose={() => setDeleteManyOpen(false)}
+      >
         <p className="mb-1 text-sm text-zinc-400">Filter:</p>
         <pre className="mb-2 rounded bg-zinc-950 p-2 font-mono text-xs">{state.filter}</pre>
         <p className="mb-2 text-sm">
@@ -544,7 +638,11 @@ export default function DocumentBrowser({ coll }: { coll: string }) {
 }
 
 function IndexesTab({
-  connId, coll, indexes, writable, onChanged,
+  connId,
+  coll,
+  indexes,
+  writable,
+  onChanged,
 }: {
   connId: number;
   coll: string;
@@ -594,7 +692,10 @@ function IndexesTab({
               <td className="py-1.5 font-mono">{f}</td>
               <td className="py-1.5 text-right">
                 {f !== '_id' && writable && (
-                  <button className="text-zinc-500 hover:text-red-400" onClick={() => setDropTarget(f)}>
+                  <button
+                    className="text-zinc-500 hover:text-red-400"
+                    onClick={() => setDropTarget(f)}
+                  >
                     <Trash2 size={13} />
                   </button>
                 )}
@@ -619,7 +720,11 @@ function IndexesTab({
       ) : (
         <p className="text-xs text-zinc-500">Read-only — index changes require write access.</p>
       )}
-      <Modal open={dropTarget !== null} title={`Drop index on "${dropTarget}"?`} onClose={() => setDropTarget(null)}>
+      <Modal
+        open={dropTarget !== null}
+        title={`Drop index on "${dropTarget}"?`}
+        onClose={() => setDropTarget(null)}
+      >
         <button className="rounded bg-red-700 px-3 py-1.5 text-sm hover:bg-red-600" onClick={drop}>
           Drop index
         </button>

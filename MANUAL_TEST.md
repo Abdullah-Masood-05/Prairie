@@ -78,3 +78,43 @@ delete confirmations.
 ## Robustness
 - [ ] Kill bisond mid-session: next action shows a network error toast, no crash
 - [ ] Server error codes render as red toasts with the code badge
+
+## v1.2.0 — authentication, TLS, roles, motion (release walk 2026-06-14)
+
+Automated layers pass on this machine:
+- [x] `bun run lint` clean · `bun run build` (tsc strict + Vite) clean · `bunx prettier --check` clean
+- [x] `bun run test` — 33/33 Vitest (palette filter, error mapping, role helpers/auth state, + prior)
+- [x] `cargo test` — client framing/typed-errors/token-expiry; TLS+auth e2e passes with `PRAIRIE_E2E=1` against a real bisond
+- [x] Engine `--auth --tls` end-to-end proven from the Rust client (protocol v2, login, CRUD, AuthFailed)
+
+Set up a secured server to walk the interactive items:
+`bisonc tls gen-cert --out-dir ./tls` then
+`BISONDB_ADMIN_PASSWORD=secret bisond --dir data/db --tls --tls-cert ./tls/cert.pem --tls-key ./tls/key.pem --init-admin admin`.
+
+### TLS / connection
+- [ ] Connect with **Use TLS → Trust a CA file** (`cert.pem`), host `localhost`: workspace lock shows 🔒 verified
+- [ ] Connect with **Pin** (paste the printed fingerprint): verified; a wrong pin fails with a TLS error
+- [ ] **Insecure** toggle shows the inline warning; connecting marks the lock ⚠ unverified
+- [ ] Plaintext client vs TLS server (uncheck Use TLS): clear error hinting to add `--tls`
+- [ ] **Local database**: opens with no login and shows 🔒 verified (sidecar self-signed + pinned)
+
+### Authentication
+- [ ] Wrong password → `AuthFailed` toast/inline ("check your username and password")
+- [ ] Successful login → workspace; header shows the username + role
+- [ ] Fresh server with no users → **Setup** screen; paste bootstrap token → first admin created → workspace
+- [ ] Token expiry (short `--token-ttl`): a command after expiry transparently re-auths (password) and succeeds
+- [ ] No token/password in localStorage or sessionStorage (DevTools → Application → Storage is empty of secrets)
+
+### Roles
+- [ ] Log in as a `read` user: insert/edit/delete/index/import controls are hidden or disabled ("requires write access")
+- [ ] `readWrite` user: data writes allowed, no Users panel
+- [ ] `admin`: Users panel — create (with role) / reset password / drop (typed confirm); self-drop disabled
+
+### Motion & accessibility
+- [ ] Modals fade+scale in/out; toasts slide+fade; route changes cross-fade; document cards stagger (capped, not a long cascade)
+- [ ] Skeletons (not spinners) show while the sidebar and documents load
+- [ ] OS "reduce motion" ON → all of the above is instant (no animation), app still fully usable
+- [ ] No console errors during any of the above
+
+### Command palette
+- [ ] ⌘/Ctrl-K opens; typing filters collections + actions; ↑/↓ navigate, Enter runs, Esc closes

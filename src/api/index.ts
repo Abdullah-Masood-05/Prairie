@@ -107,8 +107,7 @@ export const api = {
     });
   },
 
-  listCollections: (connId: number): Promise<string[]> =>
-    invoke('list_collections', { connId }),
+  listCollections: (connId: number): Promise<string[]> => invoke('list_collections', { connId }),
   dbStats: (connId: number): Promise<DbStats> => invoke('db_stats', { connId }),
   createCollection: (connId: number, name: string): Promise<boolean> => {
     requireNonEmpty(name, 'collection name');
@@ -173,8 +172,7 @@ export const api = {
     requireValidJson(filterJson, 'filter');
     return invoke('explain', { connId, coll, filterJson, limit });
   },
-  compact: (connId: number, coll: string): Promise<void> =>
-    invoke('compact', { connId, coll }),
+  compact: (connId: number, coll: string): Promise<void> => invoke('compact', { connId, coll }),
 
   importFile: (connId: number, coll: string, path: string): Promise<ImportSummary> =>
     invoke('import_file', { connId, coll, path }),

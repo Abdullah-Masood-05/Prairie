@@ -16,7 +16,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 import { create } from 'zustand';
-import { X } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { CheckCircle2, X } from 'lucide-react';
+import { describeError, errorCode } from '../api/errors';
+import { toastIn } from '../lib/motion';
 
 export interface Toast {
   id: number;
@@ -50,41 +53,53 @@ export function toastSuccess(message: string) {
   useToastStore.getState().push({ kind: 'success', message });
 }
 
-// Server errors arrive as "E[Code] message" strings from the Rust layer.
+// Server/TLS errors arrive as strings from the Rust layer; describeError turns
+// the codes (AuthRequired/Forbidden/TokenExpired/TLS…) into actionable text.
 export function toastError(raw: unknown) {
-  const text = raw instanceof Error ? raw.message : String(raw);
-  const match = /^E\[(\w+)\]\s*(.*)$/s.exec(text);
   useToastStore.getState().push({
     kind: 'error',
-    code: match?.[1],
-    message: match?.[2] ?? text,
+    code: errorCode(raw) ?? undefined,
+    message: describeError(raw),
   });
 }
 
 export function ToastHost() {
   const { toasts, dismiss } = useToastStore();
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex w-96 flex-col gap-2">
-      {toasts.map((t) => (
-        <div
-          key={t.id}
-          className={`flex items-start gap-2 rounded-lg border p-3 text-sm shadow-lg ${
-            t.kind === 'error'
-              ? 'border-red-800 bg-red-950 text-red-200'
-              : 'border-emerald-800 bg-emerald-950 text-emerald-200'
-          }`}
-        >
-          {t.code && (
-            <span className="rounded bg-red-800 px-1.5 py-0.5 text-xs font-semibold">
-              {t.code}
-            </span>
-          )}
-          <span className="flex-1 break-words">{t.message}</span>
-          <button onClick={() => dismiss(t.id)} aria-label="dismiss">
-            <X size={14} />
-          </button>
-        </div>
-      ))}
+    <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-96 flex-col gap-2">
+      <AnimatePresence initial={false}>
+        {toasts.map((t) => (
+          <motion.div
+            key={t.id}
+            layout
+            variants={toastIn}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className={`pointer-events-auto flex items-start gap-2 rounded-lg border p-3 text-sm shadow-[var(--shadow-pop)] ${
+              t.kind === 'error'
+                ? 'border-red-800/70 bg-red-950/90 text-red-100'
+                : 'border-emerald-800/70 bg-emerald-950/90 text-emerald-100'
+            }`}
+          >
+            {t.kind === 'success' ? (
+              <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-400" />
+            ) : t.code ? (
+              <span className="mt-px shrink-0 rounded bg-red-800 px-1.5 py-0.5 text-xs font-semibold">
+                {t.code}
+              </span>
+            ) : null}
+            <span className="flex-1 break-words">{t.message}</span>
+            <button
+              onClick={() => dismiss(t.id)}
+              aria-label="dismiss"
+              className="mt-0.5 opacity-60 transition-opacity hover:opacity-100"
+            >
+              <X size={14} />
+            </button>
+          </motion.div>
+        ))}
+      </AnimatePresence>
     </div>
   );
 }

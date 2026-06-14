@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.2.0 — 2026-06-14
+
+UI/UX elevation and motion — restraint over effects. No protocol change (still v2); the
+theme is unchanged (dark, amber accent on neutral surfaces).
+
+### Added
+
+- **Design system.** A token layer (neutral surface scale, one amber accent, radii,
+  elevation, type scale), the **Inter** UI typeface, and refined, cohesive
+  buttons/inputs/cards/modals/toasts.
+- **Motion** (framer-motion): modal & toast enter/exit, route cross-fades, a **capped**
+  document-list stagger, skeleton loaders for the sidebar and documents, and quick focus/
+  hover/press micro-interactions. **All motion honors `prefers-reduced-motion`.**
+- **⌘/Ctrl-K command palette** to jump to collections and run actions (arrow-nav, Enter, Esc).
+- A calm entrance + brand mark on the connection screen, and friendlier, code-aware messages
+  for auth/TLS errors (Forbidden, TokenExpired, TLS failures).
+
 ## v1.1.0 — 2026-06-14
 
 Sync with BisonDB v1.1.0+ (tested against v1.2.0): **authentication and TLS**. Prairie now

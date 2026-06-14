@@ -58,6 +58,5 @@ export const useFiltersStore = create<FiltersStore>((set, get) => ({
         [coll]: { ...(s.byCollection[coll] ?? DEFAULT), explainMode },
       },
     })),
-  reset: (coll) =>
-    set((s) => ({ byCollection: { ...s.byCollection, [coll]: { ...DEFAULT } } })),
+  reset: (coll) => set((s) => ({ byCollection: { ...s.byCollection, [coll]: { ...DEFAULT } } })),
 }));

@@ -17,12 +17,21 @@
  */
 import { useEffect, useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
-import { Database, FolderOpen, Lock, Plug, Plus } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { FolderOpen, Lock, Plug, Plus } from 'lucide-react';
 import { api } from '../api';
 import { describeError } from '../api/errors';
 import type { RecentConnection, TlsMode, TlsOptions, TlsPrefs } from '../api/types';
+import { base } from '../lib/motion';
 import { useConnectionStore } from '../stores/connection';
 import { loadRecents, saveRecent } from '../stores/recents';
+
+// Staggered entrance for the connection screen (the app "opening").
+const container = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.07, delayChildren: 0.04 } },
+};
+const item = { hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: base } };
 
 export default function ConnectionScreen() {
   const setConnection = useConnectionStore((s) => s.setConnection);
@@ -59,7 +68,13 @@ export default function ConnectionScreen() {
 
   const tlsPrefs = (): TlsPrefs | undefined =>
     useTls
-      ? { enabled: true, mode: tlsMode, caFile: caFile || undefined, pin: pin || undefined, hostname: tlsHostname || undefined }
+      ? {
+          enabled: true,
+          mode: tlsMode,
+          caFile: caFile || undefined,
+          pin: pin || undefined,
+          hostname: tlsHostname || undefined,
+        }
       : undefined;
 
   const connectRemote = async (h: string, p: number, tls?: TlsOptions, prefs?: TlsPrefs) => {
@@ -67,7 +82,14 @@ export default function ConnectionScreen() {
     setRemoteError('');
     try {
       const info = await api.connectRemote(h, p, tls);
-      await saveRecent({ kind: 'remote', label: `${h}:${p}`, host: h, port: p, tls: prefs, lastUsed: Date.now() });
+      await saveRecent({
+        kind: 'remote',
+        label: `${h}:${p}`,
+        host: h,
+        port: p,
+        tls: prefs,
+        lastUsed: Date.now(),
+      });
       setConnection(info);
     } catch (e) {
       setRemoteError(describeError(e));
@@ -149,11 +171,18 @@ export default function ConnectionScreen() {
   };
 
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-6 p-8">
-      <div className="flex items-center gap-3 text-2xl font-semibold">
-        <Database className="text-amber-500" /> BisonDB Prairie
-      </div>
-      <div className="grid w-full max-w-3xl grid-cols-2 gap-4">
+    <motion.div
+      className="flex h-full flex-col items-center justify-center gap-7 p-8"
+      variants={container}
+      initial="hidden"
+      animate="visible"
+    >
+      <motion.div variants={item} className="flex flex-col items-center gap-2">
+        <img src="/bison-icon.svg" alt="" className="h-12 w-12" draggable={false} />
+        <h1 className="text-2xl font-semibold tracking-tight">BisonDB Prairie</h1>
+        <p className="text-sm text-zinc-500">Connect to a server or open a local database.</p>
+      </motion.div>
+      <motion.div variants={item} className="grid w-full max-w-3xl grid-cols-2 gap-4">
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
           <h2 className="mb-3 flex items-center gap-2 font-medium">
             <Plug size={16} /> Connect to server
@@ -196,7 +225,9 @@ export default function ConnectionScreen() {
                   >
                     Choose PEM…
                   </button>
-                  <span className="truncate text-xs text-zinc-500">{caFile || 'no file chosen'}</span>
+                  <span className="truncate text-xs text-zinc-500">
+                    {caFile || 'no file chosen'}
+                  </span>
                 </div>
               )}
               {tlsMode === 'pin' && (
@@ -256,9 +287,9 @@ export default function ConnectionScreen() {
           </button>
           {localError && <p className="mt-2 text-xs text-red-400">{localError}</p>}
         </div>
-      </div>
+      </motion.div>
       {recents.length > 0 && (
-        <div className="w-full max-w-3xl">
+        <motion.div variants={item} className="w-full max-w-3xl">
           <h3 className="mb-2 text-sm text-zinc-400">Recent connections</h3>
           <div className="flex flex-wrap gap-2">
             {recents.map((r) => (
@@ -274,8 +305,8 @@ export default function ConnectionScreen() {
               </button>
             ))}
           </div>
-        </div>
+        </motion.div>
       )}
-    </div>
+    </motion.div>
   );
 }

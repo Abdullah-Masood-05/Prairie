@@ -33,7 +33,8 @@ function wrapperOf(v: BsonValue): { badge: string; text: string } | null {
           typeof d === 'string' ? d : String((d as { $numberLong: string }).$numberLong) + ' ms';
         return { badge: 'Date', text };
       }
-      if (keys[0] === '$numberDecimal') return { badge: 'Decimal128', text: String(o.$numberDecimal) };
+      if (keys[0] === '$numberDecimal')
+        return { badge: 'Decimal128', text: String(o.$numberDecimal) };
       if (keys[0] === '$numberLong') return { badge: 'Long', text: String(o.$numberLong) };
       if (keys[0] === '$numberDouble') return { badge: 'Double', text: String(o.$numberDouble) };
     }
@@ -55,14 +56,23 @@ function Leaf({ value }: { value: BsonValue }) {
   }
   if (value === null) return <span className="text-fuchsia-400">null</span>;
   switch (typeof value) {
-    case 'string': return <span className="text-emerald-400">"{value}"</span>;
-    case 'number': return <span className="text-amber-300">{String(value)}</span>;
-    case 'boolean': return <span className="text-fuchsia-400">{String(value)}</span>;
-    default: return null;
+    case 'string':
+      return <span className="text-emerald-400">"{value}"</span>;
+    case 'number':
+      return <span className="text-amber-300">{String(value)}</span>;
+    case 'boolean':
+      return <span className="text-fuchsia-400">{String(value)}</span>;
+    default:
+      return null;
   }
 }
 
-function Node({ name, value, depth, forceOpen }: {
+function Node({
+  name,
+  value,
+  depth,
+  forceOpen,
+}: {
   name: string;
   value: BsonValue;
   depth: number;
@@ -70,8 +80,7 @@ function Node({ name, value, depth, forceOpen }: {
 }) {
   const [openState, setOpen] = useState(depth < 1);
   const open = forceOpen ?? openState;
-  const isContainer =
-    value !== null && typeof value === 'object' && wrapperOf(value) === null;
+  const isContainer = value !== null && typeof value === 'object' && wrapperOf(value) === null;
 
   return (
     <div style={{ paddingLeft: depth * 16 }} className="leading-6">
@@ -87,7 +96,13 @@ function Node({ name, value, depth, forceOpen }: {
           {open &&
             (Array.isArray(value)
               ? value.map((v, i) => (
-                  <Node key={i} name={String(i)} value={v} depth={depth + 1} forceOpen={forceOpen} />
+                  <Node
+                    key={i}
+                    name={String(i)}
+                    value={v}
+                    depth={depth + 1}
+                    forceOpen={forceOpen}
+                  />
                 ))
               : Object.entries(value).map(([k, v]) => (
                   <Node key={k} name={k} value={v} depth={depth + 1} forceOpen={forceOpen} />
@@ -104,7 +119,13 @@ function Node({ name, value, depth, forceOpen }: {
   );
 }
 
-export function JsonTree({ doc, forceOpen = null }: { doc: BsonDocument; forceOpen?: boolean | null }) {
+export function JsonTree({
+  doc,
+  forceOpen = null,
+}: {
+  doc: BsonDocument;
+  forceOpen?: boolean | null;
+}) {
   return (
     <div className="font-mono text-xs">
       {Object.entries(doc).map(([k, v]) => (

@@ -50,11 +50,17 @@ bun run copy-sidecar     # needs BISONDB_BUILD_DIR (env or .env.local)
 bun run tauri dev
 ```
 
-`bun run test` (Vitest: JsonTree, filter store, $set-diff, api validation), `bun run lint`
-(ESLint), `cargo test` in `src-tauri/` (wire framing, truncated-find reassembly,
-import/export converters incl. CSV). CI runs all of these plus a tag-triggered
-(`v*`) Windows job that runs the full `bun run tauri build` and attaches the installer to a
-GitHub Release.
+`bun run test` (Vitest: JsonTree, filter store, $set-diff, api validation, command-palette
+filtering, error mapping, role/auth-state helpers), `bun run lint` (ESLint) + `bun run format`
+(Prettier), `cargo test` in `src-tauri/` (wire framing, typed errors, token-expiry; a TLS+auth
+end-to-end test runs against a real bisond when `PRAIRIE_E2E=1`). CI runs all of these plus a
+tag-triggered (`v*`) Windows job that runs the full `bun run tauri build` and attaches the
+installer to a GitHub Release.
+
+**Design & motion.** A token layer (neutral surfaces + a single amber accent, radii,
+elevation, a type scale on Inter) keeps components cohesive, with a small framer-motion system
+for modals, toasts, route cross-fades, a capped list stagger, and skeleton loaders — all
+gated on `prefers-reduced-motion`. ⌘/Ctrl-K opens a command palette.
 
 Screenshots and a full feature tour live in the
 [documentation site](https://abdullah-masood-05.github.io/bisondb-site/guide/prairie).

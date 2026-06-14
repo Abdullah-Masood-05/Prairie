@@ -15,8 +15,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+import type { ReactNode } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { AlertTriangle } from 'lucide-react';
 import { api } from './api';
+import { fade } from './lib/motion';
 import { useConnectionStore } from './stores/connection';
 import ConnectionScreen from './screens/Connection';
 import LoginScreen from './screens/Login';
@@ -65,19 +68,36 @@ function ProtocolMismatch() {
   );
 }
 
-function route(connection: ReturnType<typeof useConnectionStore.getState>['connection']) {
-  if (!connection) return <ConnectionScreen />;
-  if (!connection.protocol_supported) return <ProtocolMismatch />;
-  if (connection.setup_mode && !connection.authenticated) return <SetupScreen />;
-  if (connection.auth_required && !connection.authenticated) return <LoginScreen />;
-  return <Workspace />;
+type Connection = ReturnType<typeof useConnectionStore.getState>['connection'];
+
+// Returns the active view plus a stable key, so route changes cross-fade.
+function route(connection: Connection): { key: string; node: ReactNode } {
+  if (!connection) return { key: 'connect', node: <ConnectionScreen /> };
+  if (!connection.protocol_supported) return { key: 'mismatch', node: <ProtocolMismatch /> };
+  if (connection.setup_mode && !connection.authenticated)
+    return { key: 'setup', node: <SetupScreen /> };
+  if (connection.auth_required && !connection.authenticated)
+    return { key: 'login', node: <LoginScreen /> };
+  return { key: 'workspace', node: <Workspace /> };
 }
 
 export default function App() {
   const connection = useConnectionStore((s) => s.connection);
+  const { key, node } = route(connection);
   return (
     <div className="h-screen overflow-hidden">
-      {route(connection)}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={key}
+          className="h-full"
+          variants={fade}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+        >
+          {node}
+        </motion.div>
+      </AnimatePresence>
       <ToastHost />
     </div>
   );

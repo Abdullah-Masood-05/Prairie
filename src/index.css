@@ -17,10 +17,180 @@
  */
 @import 'tailwindcss';
 
+/* ── Design tokens ──────────────────────────────────────────────────────────
+   Semantic layer over the existing zinc/amber palette: the look is unchanged,
+   just centralized. Surfaces are neutral; the amber accent stays sparse. */
+@theme {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+
+  /* Neutral surface scale (zinc) */
+  --color-surface-0: #09090b; /* app background      (zinc-950) */
+  --color-surface-1: #18181b; /* panels / cards      (zinc-900) */
+  --color-surface-2: #27272a; /* hover / hairlines   (zinc-800) */
+  --color-surface-3: #3f3f46; /* strong borders      (zinc-700) */
+  --color-fg: #f4f4f5; /* primary text        (zinc-100) */
+  --color-fg-muted: #a1a1aa; /* secondary text      (zinc-400) */
+  --color-fg-subtle: #71717a; /* tertiary / icons    (zinc-500) */
+
+  /* Single accent (amber) */
+  --color-accent: #f59e0b; /* amber-500 */
+  --color-accent-strong: #d97706; /* amber-600 */
+  --color-danger: #dc2626; /* red-600  */
+
+  --radius-card: 0.75rem;
+  --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -12px rgb(0 0 0 / 0.5);
+  --shadow-pop: 0 12px 40px -8px rgb(0 0 0 / 0.6);
+
+  /* Motion (used by CSS transitions; framer-motion mirrors these in motion.ts) */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 140ms;
+}
+
 :root {
   color-scheme: dark;
 }
 
-body {
-  @apply bg-zinc-950 text-zinc-100 antialiased;
+@layer base {
+  body {
+    @apply bg-zinc-950 text-zinc-100 antialiased;
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Typographic hierarchy: tighten headings, relax body line-height. */
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.012em;
+  }
+  h1 {
+    font-weight: 600;
+  }
+
+  code,
+  pre,
+  .font-mono {
+    font-family: var(--font-mono);
+    font-feature-settings: normal;
+  }
+
+  /* One consistent, accent focus ring across all interactive elements. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 1px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-accent) 35%, transparent);
+  }
+
+  /* Quiet, themed scrollbars. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-surface-3) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--color-surface-3);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 8px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--color-fg-subtle);
+    background-clip: content-box;
+  }
+}
+
+/* ── Reusable components (cohesive, not per-screen-improvised) ──────────────── */
+@layer components {
+  /* Shared button base. (Tailwind v4 can't @apply a custom class, so each
+     variant repeats the base utilities — the JSX stays single-class.) */
+  .btn,
+  .btn-primary,
+  .btn-secondary,
+  .btn-ghost,
+  .btn-danger {
+    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-md px-3 py-1.5
+      text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-150
+      disabled:pointer-events-none disabled:opacity-40;
+  }
+  .btn:active:not(:disabled),
+  .btn-primary:active:not(:disabled),
+  .btn-secondary:active:not(:disabled),
+  .btn-ghost:active:not(:disabled),
+  .btn-danger:active:not(:disabled) {
+    transform: translateY(0.5px) scale(0.985);
+  }
+  .btn-primary {
+    @apply bg-amber-600 text-zinc-50 hover:bg-amber-500;
+  }
+  .btn-secondary {
+    @apply border border-zinc-700 bg-zinc-800/60 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-800;
+  }
+  .btn-ghost {
+    @apply text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100;
+  }
+  .btn-danger {
+    @apply bg-red-700 text-zinc-50 hover:bg-red-600;
+  }
+
+  .input {
+    @apply w-full rounded-md border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-sm
+      text-zinc-100 placeholder:text-zinc-600 transition-colors duration-150
+      hover:border-zinc-600 focus:border-amber-500/70;
+  }
+
+  .card {
+    @apply rounded-xl border border-zinc-800 bg-zinc-900;
+  }
+
+  /* Skeleton placeholder with a subtle sweep (disabled under reduced-motion). */
+  .skeleton {
+    @apply rounded bg-zinc-800/80;
+    position: relative;
+    overflow: hidden;
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--color-surface-3) 55%, transparent),
+      transparent
+    );
+    animation: skeleton-sweep 1.5s ease-in-out infinite;
+  }
+}
+
+@keyframes skeleton-sweep {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* ── Respect prefers-reduced-motion globally ──────────────────────────────────
+   Kills all non-essential motion (CSS + the skeleton sweep). framer-motion is
+   told to reduce motion via <MotionConfig reducedMotion="user"> in App. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .skeleton::after {
+    display: none;
+  }
 }

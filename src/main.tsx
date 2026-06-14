@@ -18,6 +18,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MotionConfig } from 'framer-motion';
+import '@fontsource-variable/inter';
 import App from './App';
 import './index.css';
 
@@ -57,7 +59,11 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <App />
+        {/* reducedMotion="user" => all framer-motion animations honor the OS
+            "reduce motion" setting (CSS handles the rest in index.css). */}
+        <MotionConfig reducedMotion="user">
+          <App />
+        </MotionConfig>
       </QueryClientProvider>
     </ErrorBoundary>
   </React.StrictMode>,
