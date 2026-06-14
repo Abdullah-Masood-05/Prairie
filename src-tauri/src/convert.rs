@@ -37,7 +37,11 @@ pub struct ImportSummary {
 /// document carries its own leading i32 size); .json = one document or an
 /// array; .jsonl = one document per line.
 pub fn read_documents(path: &Path) -> Result<Vec<Document>, ClientError> {
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
     let mut bytes = Vec::new();
     std::fs::File::open(path)?.read_to_end(&mut bytes)?;
 
@@ -70,8 +74,8 @@ pub fn read_documents(path: &Path) -> Result<Vec<Document>, ClientError> {
             docs.push(json_to_doc(json)?);
         }
     } else {
-        let json: serde_json::Value = serde_json::from_str(&text)
-            .map_err(|e| ClientError::Protocol(e.to_string()))?;
+        let json: serde_json::Value =
+            serde_json::from_str(&text).map_err(|e| ClientError::Protocol(e.to_string()))?;
         match json {
             serde_json::Value::Array(items) => {
                 for item in items {
@@ -199,7 +203,11 @@ pub fn write_documents(path: &Path, docs: &[Document], format: &str) -> Result<(
                 .collect();
             file.write_all(serde_json::to_string_pretty(&array).unwrap().as_bytes())?;
         }
-        other => return Err(ClientError::Other(format!("unknown export format '{other}'"))),
+        other => {
+            return Err(ClientError::Other(format!(
+                "unknown export format '{other}'"
+            )))
+        }
     }
     Ok(())
 }
@@ -231,7 +239,7 @@ mod tests {
     fn csv_export_quotes_and_orders_columns() {
         let docs = vec![
             doc! {"name": "a,b", "n": 1i32, "_id": bson::oid::ObjectId::parse_str(
-                "507f1f77bcf86cd799439011").unwrap()},
+            "507f1f77bcf86cd799439011").unwrap()},
             doc! {"name": "say \"hi\"", "extra": {"nested": true}},
         ];
         let dir = std::env::temp_dir().join("prairie_csv_test");

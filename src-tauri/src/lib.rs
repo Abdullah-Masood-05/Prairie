@@ -54,6 +54,13 @@ pub fn run() {
             commands::export_file,
             commands::load_recents,
             commands::save_recents,
+            commands::authenticate,
+            commands::bootstrap_admin,
+            commands::logout,
+            commands::create_user,
+            commands::drop_user,
+            commands::change_password,
+            commands::list_users,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Prairie")

@@ -20,12 +20,14 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::process::Stdio;
 use std::sync::Mutex;
 use std::time::Duration;
 
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 
-use crate::client::{BisonConnection, ClientError};
+use crate::client::{BisonConnection, ClientError, TlsConfig, TlsMode};
 
 /// Tracks spawned bisond children. A std (not tokio) Mutex so the kill path
 /// also works synchronously from the tauri RunEvent::Exit handler — that is
@@ -64,7 +66,11 @@ impl SidecarManager {
 pub fn bisond_path(app: &tauri::AppHandle) -> Result<PathBuf, ClientError> {
     use tauri::Manager;
 
-    let name = if cfg!(windows) { "bisond.exe" } else { "bisond" };
+    let name = if cfg!(windows) {
+        "bisond.exe"
+    } else {
+        "bisond"
+    };
     let mut tried: Vec<PathBuf> = Vec::new();
     let check = |p: PathBuf, tried: &mut Vec<PathBuf>| -> Option<PathBuf> {
         if p.exists() {
@@ -94,10 +100,10 @@ pub fn bisond_path(app: &tauri::AppHandle) -> Result<PathBuf, ClientError> {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             for cand in [
-                dir.join(name),                       // flat bundle: next to the exe
-                dir.join("bin").join(name),           // bin/ beside the exe
-                dir.join("../../bin").join(name),     // dev: target/<profile>/ → src-tauri/bin
-                dir.join("../../../bin").join(name),  // dev safety net for deeper nesting
+                dir.join(name),                      // flat bundle: next to the exe
+                dir.join("bin").join(name),          // bin/ beside the exe
+                dir.join("../../bin").join(name),    // dev: target/<profile>/ → src-tauri/bin
+                dir.join("../../../bin").join(name), // dev safety net for deeper nesting
             ] {
                 if let Some(p) = check(cand, &mut tried) {
                     return Ok(p);
@@ -132,8 +138,22 @@ fn free_port() -> Result<u16, ClientError> {
     Ok(listener.local_addr()?.port())
 }
 
-/// Spawns bisond for `db_dir`, waits until it answers ping (~2s of retries),
-/// and returns (child, connected client, port).
+/// Parses the SHA-256 fingerprint from bisond's `--tls-self-signed` banner line
+/// (`... --tls-pin <64-hex>`).
+fn parse_fingerprint(line: &str) -> Option<String> {
+    let idx = line.find("--tls-pin")?;
+    let tok = line[idx + "--tls-pin".len()..].split_whitespace().next()?;
+    if tok.len() == 64 && tok.chars().all(|c| c.is_ascii_hexdigit()) {
+        Some(tok.to_string())
+    } else {
+        None
+    }
+}
+
+/// Spawns bisond for `db_dir` over a self-signed TLS cert on a private loopback
+/// port (`--no-auth`, so no login friction). The cert's fingerprint is read
+/// from the startup banner on stderr and pinned, so the local connection is
+/// encrypted AND verified — never insecure. Returns (child, client, port).
 pub async fn start_local(
     app: &tauri::AppHandle,
     db_dir: &str,
@@ -141,8 +161,17 @@ pub async fn start_local(
     let binary = bisond_path(app)?;
     let port = free_port()?;
     let mut cmd = Command::new(&binary);
-    cmd.args(["--dir", db_dir, "--port", &port.to_string(), "--quiet"])
-        .kill_on_drop(true);
+    cmd.args([
+        "--dir",
+        db_dir,
+        "--port",
+        &port.to_string(),
+        "--quiet",
+        "--tls-self-signed",
+        "--no-auth",
+    ])
+    .stderr(Stdio::piped())
+    .kill_on_drop(true);
     // bisond is a console-subsystem binary; without this flag Windows opens a
     // visible console window for the sidecar. CREATE_NO_WINDOW suppresses it.
     #[cfg(windows)]
@@ -150,14 +179,55 @@ pub async fn start_local(
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
-    let child = cmd
+    let mut child = cmd
         .spawn()
         .map_err(|e| ClientError::Other(format!("cannot start {}: {e}", binary.display())))?;
+
+    // Read the cert fingerprint from the startup banner (printed before the
+    // listener binds, regardless of --quiet).
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| ClientError::Other("local bisond: no stderr pipe".into()))?;
+    let mut lines = BufReader::new(stderr).lines();
+    let fingerprint = {
+        let mut found: Option<String> = None;
+        for _ in 0..200 {
+            match tokio::time::timeout(Duration::from_secs(3), lines.next_line()).await {
+                Ok(Ok(Some(line))) => {
+                    if let Some(fp) = parse_fingerprint(&line) {
+                        found = Some(fp);
+                        break;
+                    }
+                }
+                _ => break,
+            }
+        }
+        found.ok_or_else(|| {
+            ClientError::Other(
+                "could not read the local bisond TLS fingerprint (is it a recent build?)".into(),
+            )
+        })?
+    };
+    // Drain the rest of stderr so the child never blocks on a full pipe.
+    tokio::spawn(async move { while let Ok(Some(_)) = lines.next_line().await {} });
+
+    let tls = TlsConfig {
+        mode: TlsMode::Pin(fingerprint),
+        hostname: "localhost".to_string(),
+    };
 
     let mut last = String::from("no attempts");
     for _ in 0..20 {
         tokio::time::sleep(Duration::from_millis(100)).await;
-        match BisonConnection::connect("127.0.0.1", port, Duration::from_millis(500)).await {
+        match BisonConnection::connect(
+            "127.0.0.1",
+            port,
+            Duration::from_millis(500),
+            Some(tls.clone()),
+        )
+        .await
+        {
             Ok(mut conn) => match conn.command(bson::doc! {"cmd": "ping"}).await {
                 Ok(_) => return Ok((child, conn, port)),
                 Err(e) => last = e.to_string(),
@@ -165,5 +235,7 @@ pub async fn start_local(
             Err(e) => last = e.to_string(),
         }
     }
-    Err(ClientError::Other(format!("local bisond did not become ready: {last}")))
+    Err(ClientError::Other(format!(
+        "local bisond did not become ready: {last}"
+    )))
 }
