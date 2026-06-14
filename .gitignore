@@ -27,7 +27,10 @@ dist-ssr
 src-tauri/target/
 src-tauri/bin/
 src-tauri/gen/
-src-tauri/icons/
+# Desktop icons ARE tracked (tauri-build needs them at compile time, incl. CI).
+# Only the large generated mobile icon sets are ignored.
+src-tauri/icons/android/
+src-tauri/icons/ios/
 
 # Environment files
 .env.local
