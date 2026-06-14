@@ -19,8 +19,13 @@ import { AlertTriangle } from 'lucide-react';
 import { api } from './api';
 import { useConnectionStore } from './stores/connection';
 import ConnectionScreen from './screens/Connection';
+import LoginScreen from './screens/Login';
+import SetupScreen from './screens/Setup';
 import Workspace from './screens/Workspace';
 import { ToastHost } from './components/Toast';
+
+// Wire-protocol revision this Prairie build speaks (BisonDB v1.1.0+/TLS).
+const EXPECTED_PROTOCOL = 2;
 
 // Blocking screen for servers speaking a different wire-protocol revision —
 // every command after this point could misbehave, so nothing else renders.
@@ -40,13 +45,15 @@ function ProtocolMismatch() {
       <h1 className="text-xl font-semibold">Incompatible server protocol</h1>
       <p className="max-w-lg text-sm text-zinc-400">
         The server at <span className="font-mono">{connection.label}</span> (BisonDB{' '}
-        {connection.server_version}) reports wire-protocol version{' '}
-        <b>{connection.protocol_version === 0 ? 'none (pre-1.0)' : connection.protocol_version}</b>
-        , but this build of Prairie requires version <b>1</b>. Continuing could fail
+        {connection.server_version}) speaks wire-protocol version{' '}
+        <b>{connection.protocol_version === 0 ? 'none (pre-1.0)' : connection.protocol_version}</b>,
+        but this build of Prairie expects version <b>{EXPECTED_PROTOCOL}</b>. Continuing could fail
         unpredictably, so the workspace is disabled.
       </p>
       <p className="max-w-lg text-sm text-zinc-400">
-        Upgrade the server to BisonDB 1.0.0 (or use a matching Prairie release), then reconnect.
+        {connection.protocol_version < EXPECTED_PROTOCOL
+          ? 'Update the server to BisonDB 1.1.0 or newer, then reconnect.'
+          : 'Update Prairie to a build that matches this server, then reconnect.'}
       </p>
       <button
         className="rounded bg-amber-600 px-4 py-1.5 text-sm hover:bg-amber-500"
@@ -58,19 +65,19 @@ function ProtocolMismatch() {
   );
 }
 
+function route(connection: ReturnType<typeof useConnectionStore.getState>['connection']) {
+  if (!connection) return <ConnectionScreen />;
+  if (!connection.protocol_supported) return <ProtocolMismatch />;
+  if (connection.setup_mode && !connection.authenticated) return <SetupScreen />;
+  if (connection.auth_required && !connection.authenticated) return <LoginScreen />;
+  return <Workspace />;
+}
+
 export default function App() {
   const connection = useConnectionStore((s) => s.connection);
   return (
     <div className="h-screen overflow-hidden">
-      {connection ? (
-        connection.protocol_supported ? (
-          <Workspace />
-        ) : (
-          <ProtocolMismatch />
-        )
-      ) : (
-        <ConnectionScreen />
-      )}
+      {route(connection)}
       <ToastHost />
     </div>
   );

@@ -17,9 +17,10 @@
  */
 import { useEffect, useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
-import { Database, FolderOpen, Plug, Plus } from 'lucide-react';
+import { Database, FolderOpen, Lock, Plug, Plus } from 'lucide-react';
 import { api } from '../api';
-import type { RecentConnection } from '../api/types';
+import { describeError } from '../api/errors';
+import type { RecentConnection, TlsMode, TlsOptions, TlsPrefs } from '../api/types';
 import { useConnectionStore } from '../stores/connection';
 import { loadRecents, saveRecent } from '../stores/recents';
 
@@ -32,21 +33,65 @@ export default function ConnectionScreen() {
   const [busy, setBusy] = useState(false);
   const [recents, setRecents] = useState<RecentConnection[]>([]);
 
+  // TLS form state.
+  const [useTls, setUseTls] = useState(false);
+  const [tlsMode, setTlsMode] = useState<TlsMode>('system');
+  const [caFile, setCaFile] = useState('');
+  const [pin, setPin] = useState('');
+  const [tlsHostname, setTlsHostname] = useState('');
+
   useEffect(() => {
-    loadRecents().then(setRecents).catch(() => setRecents([]));
+    loadRecents()
+      .then(setRecents)
+      .catch(() => setRecents([]));
   }, []);
 
-  const connectRemote = async (h: string, p: number) => {
+  const buildTls = (): TlsOptions | undefined =>
+    useTls
+      ? {
+          enabled: true,
+          mode: tlsMode,
+          ca_file: caFile || undefined,
+          pin: pin || undefined,
+          hostname: tlsHostname || undefined,
+        }
+      : undefined;
+
+  const tlsPrefs = (): TlsPrefs | undefined =>
+    useTls
+      ? { enabled: true, mode: tlsMode, caFile: caFile || undefined, pin: pin || undefined, hostname: tlsHostname || undefined }
+      : undefined;
+
+  const connectRemote = async (h: string, p: number, tls?: TlsOptions, prefs?: TlsPrefs) => {
     setBusy(true);
     setRemoteError('');
     try {
-      const info = await api.connectRemote(h, p);
-      await saveRecent({ kind: 'remote', label: `${h}:${p}`, host: h, port: p, lastUsed: Date.now() });
+      const info = await api.connectRemote(h, p, tls);
+      await saveRecent({ kind: 'remote', label: `${h}:${p}`, host: h, port: p, tls: prefs, lastUsed: Date.now() });
       setConnection(info);
     } catch (e) {
-      setRemoteError(String(e instanceof Error ? e.message : e));
+      setRemoteError(describeError(e));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const applyRecentAndConnect = (r: RecentConnection) => {
+    if (r.kind === 'remote') {
+      const t = r.tls;
+      setHost(r.host ?? '127.0.0.1');
+      setPort(String(r.port ?? 27027));
+      setUseTls(Boolean(t?.enabled));
+      setTlsMode(t?.mode ?? 'system');
+      setCaFile(t?.caFile ?? '');
+      setPin(t?.pin ?? '');
+      setTlsHostname(t?.hostname ?? '');
+      const tls: TlsOptions | undefined = t?.enabled
+        ? { enabled: true, mode: t.mode, ca_file: t.caFile, pin: t.pin, hostname: t.hostname }
+        : undefined;
+      void connectRemote(r.host ?? '127.0.0.1', r.port ?? 27027, tls, t);
+    } else {
+      void openLocal(r.path ?? '', false);
     }
   };
 
@@ -58,7 +103,7 @@ export default function ConnectionScreen() {
       await saveRecent({ kind: 'local', label: path, path, lastUsed: Date.now() });
       setConnection(info);
     } catch (e) {
-      setLocalError(String(e instanceof Error ? e.message : e));
+      setLocalError(describeError(e));
     } finally {
       setBusy(false);
     }
@@ -70,8 +115,6 @@ export default function ConnectionScreen() {
         directory: true,
         title: create ? 'Create database folder' : 'Open database folder',
       });
-      // Depending on the dialog plugin version the result may be a string or
-      // an object with a `path` field.
       const folder =
         typeof result === 'string'
           ? result
@@ -82,7 +125,26 @@ export default function ConnectionScreen() {
         await openLocal(folder, create);
       }
     } catch (e) {
-      setLocalError(String(e instanceof Error ? e.message : e));
+      setLocalError(describeError(e));
+    }
+  };
+
+  const pickCaFile = async () => {
+    try {
+      const result = await open({
+        multiple: false,
+        title: 'Select CA / certificate (PEM)',
+        filters: [{ name: 'Certificate', extensions: ['pem', 'crt', 'cert', 'cer'] }],
+      });
+      const file =
+        typeof result === 'string'
+          ? result
+          : result !== null && typeof result === 'object' && 'path' in result
+            ? String((result as { path: string }).path)
+            : null;
+      if (file) setCaFile(file);
+    } catch (e) {
+      setRemoteError(describeError(e));
     }
   };
 
@@ -108,10 +170,63 @@ export default function ConnectionScreen() {
             value={port}
             onChange={(e) => setPort(e.target.value)}
           />
+
+          {/* TLS section */}
+          <label className="mb-2 flex items-center gap-2 text-xs text-zinc-300">
+            <input type="checkbox" checked={useTls} onChange={(e) => setUseTls(e.target.checked)} />
+            <Lock size={12} /> Use TLS (encrypt the connection)
+          </label>
+          {useTls && (
+            <div className="mb-3 space-y-2 rounded border border-zinc-800 bg-zinc-950/60 p-2">
+              <select
+                className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs"
+                value={tlsMode}
+                onChange={(e) => setTlsMode(e.target.value as TlsMode)}
+              >
+                <option value="system">Verify against system trust store</option>
+                <option value="ca">Trust a CA / self-signed cert (file)</option>
+                <option value="pin">Pin certificate fingerprint (SHA-256)</option>
+                <option value="insecure">Skip verification (insecure)</option>
+              </select>
+              {tlsMode === 'ca' && (
+                <div className="flex items-center gap-2">
+                  <button
+                    className="rounded border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800"
+                    onClick={pickCaFile}
+                  >
+                    Choose PEM…
+                  </button>
+                  <span className="truncate text-xs text-zinc-500">{caFile || 'no file chosen'}</span>
+                </div>
+              )}
+              {tlsMode === 'pin' && (
+                <input
+                  className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 font-mono text-[11px]"
+                  placeholder="64-char SHA-256 fingerprint"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value)}
+                />
+              )}
+              {tlsMode === 'insecure' && (
+                <p className="rounded border border-red-800/60 bg-red-950/40 p-2 text-[11px] text-red-300">
+                  ⚠ Verification is OFF. The connection is encrypted but you cannot be sure who you
+                  are talking to — a man-in-the-middle could impersonate the server. Use only for
+                  local development on a trusted machine.
+                </p>
+              )}
+              <input
+                className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs"
+                placeholder="hostname override (optional; defaults to host)"
+                value={tlsHostname}
+                onChange={(e) => setTlsHostname(e.target.value)}
+              />
+            </div>
+          )}
+
           <button
             className="w-full rounded bg-amber-600 py-1.5 text-sm font-medium hover:bg-amber-500 disabled:opacity-50"
             disabled={busy}
-            onClick={() => connectRemote(host, Number(port))}
+            onClick={() => connectRemote(host, Number(port), buildTls(), tlsPrefs())}
           >
             Connect
           </button>
@@ -122,7 +237,8 @@ export default function ConnectionScreen() {
             <FolderOpen size={16} /> Local database
           </h2>
           <p className="mb-3 text-xs text-zinc-400">
-            Runs a bundled bisond on a private port for the chosen folder.
+            Runs a bundled bisond on a private port (encrypted with a pinned self-signed cert; no
+            login needed).
           </p>
           <button
             className="mb-2 w-full rounded border border-zinc-700 py-1.5 text-sm hover:bg-zinc-800 disabled:opacity-50"
@@ -148,16 +264,13 @@ export default function ConnectionScreen() {
             {recents.map((r) => (
               <button
                 key={r.kind + r.label}
-                className="rounded-full border border-zinc-700 px-3 py-1 text-xs hover:bg-zinc-800"
+                className="flex items-center gap-1 rounded-full border border-zinc-700 px-3 py-1 text-xs hover:bg-zinc-800"
                 disabled={busy}
-                onClick={() =>
-                  r.kind === 'remote'
-                    ? connectRemote(r.host ?? '127.0.0.1', r.port ?? 27027)
-                    : openLocal(r.path ?? '', false)
-                }
+                onClick={() => applyRecentAndConnect(r)}
               >
                 {r.kind === 'remote' ? '🌐 ' : '📁 '}
                 {r.label}
+                {r.tls?.enabled && <Lock size={10} className="text-emerald-400" />}
               </button>
             ))}
           </div>

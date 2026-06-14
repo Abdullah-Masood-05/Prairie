@@ -16,12 +16,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 import { create } from 'zustand';
-import type { ConnectionInfo } from '../api/types';
+import type { AuthInfo, ConnectionInfo } from '../api/types';
 
 interface ConnectionState {
   connection: ConnectionInfo | null;
   selectedCollection: string | null;
   setConnection: (c: ConnectionInfo | null) => void;
+  // Marks the connection authenticated and records the user + roles returned
+  // by authenticate()/bootstrap. The token itself never leaves the Rust side.
+  setAuth: (auth: AuthInfo) => void;
   selectCollection: (name: string | null) => void;
 }
 
@@ -29,5 +32,26 @@ export const useConnectionStore = create<ConnectionState>((set) => ({
   connection: null,
   selectedCollection: null,
   setConnection: (connection) => set({ connection, selectedCollection: null }),
+  setAuth: (auth) =>
+    set((s) =>
+      s.connection
+        ? {
+            connection: {
+              ...s.connection,
+              authenticated: true,
+              username: auth.username,
+              roles: auth.roles,
+            },
+          }
+        : s,
+    ),
   selectCollection: (selectedCollection) => set({ selectedCollection }),
 }));
+
+// Role helpers (server-side roles are authoritative; these only gate the UI).
+export function canWrite(roles: string[]): boolean {
+  return roles.includes('readWrite') || roles.includes('admin');
+}
+export function isAdmin(roles: string[]): boolean {
+  return roles.includes('admin');
+}

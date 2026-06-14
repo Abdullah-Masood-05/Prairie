@@ -17,12 +17,40 @@
  */
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Database, LogOut, Plus, RefreshCw, Trash2, Wrench } from 'lucide-react';
+import {
+  Database,
+  LogOut,
+  Plus,
+  RefreshCw,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldX,
+  Trash2,
+  Users,
+  Wrench,
+} from 'lucide-react';
 import { api } from '../api';
-import { useConnectionStore } from '../stores/connection';
+import type { TlsState } from '../api/types';
+import { canWrite, isAdmin, useConnectionStore } from '../stores/connection';
 import { toastError, toastSuccess } from '../components/Toast';
 import { Modal } from '../components/Modal';
+import { UsersModal } from '../components/UsersModal';
 import DocumentBrowser from './DocumentBrowser';
+
+// Lock indicator for the workspace header.
+function LockBadge({ tls }: { tls: TlsState }) {
+  const map = {
+    verified: { Icon: ShieldCheck, cls: 'text-emerald-400', label: '🔒 encrypted & verified' },
+    unverified: { Icon: ShieldAlert, cls: 'text-amber-400', label: '⚠ encrypted, unverified' },
+    plaintext: { Icon: ShieldX, cls: 'text-red-400', label: '⛔ not encrypted (plaintext)' },
+  } as const;
+  const { Icon, cls, label } = map[tls];
+  return (
+    <span className={`flex items-center ${cls}`} title={label}>
+      <Icon size={14} />
+    </span>
+  );
+}
 
 export default function Workspace() {
   const { connection, selectedCollection, selectCollection, setConnection } =
@@ -33,8 +61,13 @@ export default function Workspace() {
   const [newCollError, setNewCollError] = useState('');
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [dropConfirm, setDropConfirm] = useState('');
+  const [usersOpen, setUsersOpen] = useState(false);
 
   const connId = connection!.conn_id;
+  const roles = connection!.roles;
+  const writable = canWrite(roles);
+  const admin = isAdmin(roles);
+  const writeTip = 'requires write access';
   const stats = useQuery({
     queryKey: ['dbStats', connId],
     queryFn: () => api.dbStats(connId),
@@ -86,6 +119,11 @@ export default function Workspace() {
 
   const disconnect = async () => {
     try {
+      await api.logout(connId); // revoke the session token server-side
+    } catch {
+      /* not authenticated / already gone */
+    }
+    try {
       await api.disconnect(connId);
     } finally {
       setConnection(null);
@@ -98,9 +136,30 @@ export default function Workspace() {
         <div className="flex items-center gap-2 border-b border-zinc-800 p-3 text-sm">
           <Database size={16} className="shrink-0 text-amber-500" />
           <div className="min-w-0 flex-1">
-            <div className="truncate font-medium">{connection!.label}</div>
-            <div className="text-xs text-zinc-500">v{connection!.server_version}</div>
+            <div className="flex items-center gap-1.5">
+              <span className="truncate font-medium">{connection!.label}</span>
+              <LockBadge tls={connection!.tls} />
+            </div>
+            <div className="text-xs text-zinc-500">
+              v{connection!.server_version}
+              {connection!.username && (
+                <>
+                  {' · '}
+                  <span className="text-zinc-400">{connection!.username}</span>
+                  {roles.length > 0 && <span className="text-zinc-600"> ({roles.join(',')})</span>}
+                </>
+              )}
+            </div>
           </div>
+          {admin && (
+            <button
+              title="Manage users"
+              onClick={() => setUsersOpen(true)}
+              className="text-zinc-400 hover:text-zinc-100"
+            >
+              <Users size={15} />
+            </button>
+          )}
           <button title="Disconnect" onClick={disconnect} className="text-zinc-400 hover:text-zinc-100">
             <LogOut size={15} />
           </button>
@@ -111,7 +170,12 @@ export default function Workspace() {
             <button title="Refresh" onClick={refreshAll}>
               <RefreshCw size={13} />
             </button>
-            <button title="New collection" onClick={() => setNewCollOpen(true)}>
+            <button
+              title={writable ? 'New collection' : writeTip}
+              disabled={!writable}
+              className="disabled:opacity-30"
+              onClick={() => setNewCollOpen(true)}
+            >
               <Plus size={14} />
             </button>
           </span>
@@ -129,26 +193,30 @@ export default function Workspace() {
               <span className="truncate">{c.name}</span>
               <span className="flex items-center gap-1">
                 <span className="text-xs text-zinc-500">{c.count}</span>
-                <button
-                  title="Compact"
-                  className="hidden text-zinc-500 hover:text-zinc-200 group-hover:inline"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    compact(c.name);
-                  }}
-                >
-                  <Wrench size={12} />
-                </button>
-                <button
-                  title="Drop collection"
-                  className="hidden text-zinc-500 hover:text-red-400 group-hover:inline"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDropTarget(c.name);
-                  }}
-                >
-                  <Trash2 size={12} />
-                </button>
+                {writable && (
+                  <>
+                    <button
+                      title="Compact"
+                      className="hidden text-zinc-500 hover:text-zinc-200 group-hover:inline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        compact(c.name);
+                      }}
+                    >
+                      <Wrench size={12} />
+                    </button>
+                    <button
+                      title="Drop collection"
+                      className="hidden text-zinc-500 hover:text-red-400 group-hover:inline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDropTarget(c.name);
+                      }}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </>
+                )}
               </span>
             </div>
           ))}
@@ -205,6 +273,15 @@ export default function Workspace() {
           Drop collection
         </button>
       </Modal>
+
+      {admin && (
+        <UsersModal
+          connId={connId}
+          currentUser={connection!.username}
+          open={usersOpen}
+          onClose={() => setUsersOpen(false)}
+        />
+      )}
     </div>
   );
 }

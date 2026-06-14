@@ -17,6 +17,9 @@
  */
 // Typed mirror of the Rust #[tauri::command] surface. No `any`.
 
+// Transport security of a live connection (from the Rust backend).
+export type TlsState = 'plaintext' | 'verified' | 'unverified';
+
 export interface ConnectionInfo {
   conn_id: number;
   label: string;
@@ -26,7 +29,38 @@ export interface ConnectionInfo {
   // that does not report one). Prairie blocks the workspace on mismatch.
   protocol_version: number;
   protocol_supported: boolean;
+  // serverStatus.security — drives the login step and the lock indicator.
+  auth_required: boolean;
+  setup_mode: boolean;
+  authenticated: boolean;
+  username: string | null;
+  roles: string[];
+  tls: TlsState;
 }
+
+export type TlsMode = 'system' | 'ca' | 'pin' | 'insecure';
+
+// TLS options sent to connect_remote. `enabled` gates the rest.
+export interface TlsOptions {
+  enabled: boolean;
+  mode: TlsMode;
+  ca_file?: string;
+  pin?: string;
+  hostname?: string;
+}
+
+export interface AuthInfo {
+  username: string | null;
+  roles: string[];
+}
+
+export interface UserRow {
+  username: string;
+  roles: string[];
+  disabled: boolean;
+}
+
+export type Role = 'read' | 'readWrite' | 'admin';
 
 export type BsonScalar = string | number | boolean | null;
 
@@ -76,11 +110,23 @@ export interface ImportSummary {
 // csv is export-only (top-level fields become columns).
 export type ExportFormat = 'json' | 'jsonl' | 'bson' | 'csv';
 
+// TLS preferences remembered for a recent connection. NEVER includes secrets.
+export interface TlsPrefs {
+  enabled: boolean;
+  mode: TlsMode;
+  caFile?: string;
+  pin?: string;
+  hostname?: string;
+}
+
 export interface RecentConnection {
   kind: 'remote' | 'local';
   label: string;
   host?: string;
   port?: number;
   path?: string;
+  // Remembered to pre-fill the form. NEVER a password or token.
+  username?: string;
+  tls?: TlsPrefs;
   lastUsed: number;
 }

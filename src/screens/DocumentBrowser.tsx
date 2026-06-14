@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { api, computeSetDiff } from '../api';
 import type { BsonDocument, ExportFormat } from '../api/types';
-import { useConnectionStore } from '../stores/connection';
+import { canWrite, useConnectionStore } from '../stores/connection';
 import { useFiltersStore } from '../stores/filters';
 import { JsonTree, CopyDocButton } from '../components/JsonTree';
 import { Modal } from '../components/Modal';
@@ -67,6 +67,8 @@ function validJson(text: string): string | null {
 
 export default function DocumentBrowser({ coll }: { coll: string }) {
   const connId = useConnectionStore((s) => s.connection!.conn_id);
+  const writable = canWrite(useConnectionStore((s) => s.connection!.roles));
+  const writeTip = 'requires write access';
   const filters = useFiltersStore();
   const state = filters.get(coll);
   const queryClient = useQueryClient();
@@ -272,7 +274,9 @@ export default function DocumentBrowser({ coll }: { coll: string }) {
         </nav>
         <div className="flex-1" />
         <button
-          className="flex items-center gap-1 rounded bg-amber-600 px-2 py-1 text-sm hover:bg-amber-500"
+          className="flex items-center gap-1 rounded bg-amber-600 px-2 py-1 text-sm hover:bg-amber-500 disabled:opacity-40"
+          disabled={!writable}
+          title={writable ? 'Insert document' : writeTip}
           onClick={() => {
             setEditorText('{\n  \n}');
             setEditorError('');
@@ -320,12 +324,14 @@ export default function DocumentBrowser({ coll }: { coll: string }) {
             >
               <Zap size={13} /> Explain
             </button>
-            <button
-              className="flex items-center gap-1 rounded bg-zinc-800 px-2 py-1.5 text-sm text-red-300 hover:bg-zinc-700"
-              onClick={() => setDeleteManyOpen(true)}
-            >
-              <Trash2 size={13} /> Delete matching
-            </button>
+            {writable && (
+              <button
+                className="flex items-center gap-1 rounded bg-zinc-800 px-2 py-1.5 text-sm text-red-300 hover:bg-zinc-700"
+                onClick={() => setDeleteManyOpen(true)}
+              >
+                <Trash2 size={13} /> Delete matching
+              </button>
+            )}
           </div>
           {draftError && <div className="px-4 py-1 text-xs text-red-400">{draftError}</div>}
 
@@ -358,35 +364,41 @@ export default function DocumentBrowser({ coll }: { coll: string }) {
             ) : result.data && result.data.docs.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-2 text-zinc-500">
                 <p>No documents{state.filter !== '{}' ? ' match this filter' : ' yet'}.</p>
-                <button
-                  className="rounded bg-amber-600 px-3 py-1.5 text-sm text-zinc-50 hover:bg-amber-500"
-                  onClick={() => {
-                    setEditorText('{\n  \n}');
-                    setInsertOpen(true);
-                  }}
-                >
-                  Insert your first document
-                </button>
+                {writable && (
+                  <button
+                    className="rounded bg-amber-600 px-3 py-1.5 text-sm text-zinc-50 hover:bg-amber-500"
+                    onClick={() => {
+                      setEditorText('{\n  \n}');
+                      setInsertOpen(true);
+                    }}
+                  >
+                    Insert your first document
+                  </button>
+                )}
               </div>
             ) : (
               result.data?.docs.map((doc, i) => (
                 <div key={oidOf(doc) || i} className="group mb-2 rounded border border-zinc-800 bg-zinc-900 p-2">
                   <div className="mb-1 flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100">
                     <CopyDocButton doc={doc} />
-                    <button
-                      title="Edit"
-                      className="text-zinc-500 hover:text-amber-400"
-                      onClick={() => {
-                        setEditorDoc(doc);
-                        setEditorText(JSON.stringify(doc, null, 2));
-                        setEditorError('');
-                      }}
-                    >
-                      <Pencil size={13} />
-                    </button>
-                    <button title="Delete" className="text-zinc-500 hover:text-red-400" onClick={() => setDeleteDoc(doc)}>
-                      <Trash2 size={13} />
-                    </button>
+                    {writable && (
+                      <>
+                        <button
+                          title="Edit"
+                          className="text-zinc-500 hover:text-amber-400"
+                          onClick={() => {
+                            setEditorDoc(doc);
+                            setEditorText(JSON.stringify(doc, null, 2));
+                            setEditorError('');
+                          }}
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button title="Delete" className="text-zinc-500 hover:text-red-400" onClick={() => setDeleteDoc(doc)}>
+                          <Trash2 size={13} />
+                        </button>
+                      </>
+                    )}
                   </div>
                   <JsonTree doc={doc} />
                 </div>
@@ -419,14 +431,25 @@ export default function DocumentBrowser({ coll }: { coll: string }) {
       )}
 
       {tab === 'indexes' && (
-        <IndexesTab connId={connId} coll={coll} indexes={indexes.data ?? []} onChanged={invalidate} />
+        <IndexesTab
+          connId={connId}
+          coll={coll}
+          indexes={indexes.data ?? []}
+          writable={writable}
+          onChanged={invalidate}
+        />
       )}
 
       {tab === 'io' && (
         <div className="space-y-6 p-4 text-sm">
           <div>
             <h2 className="mb-2 flex items-center gap-1 font-medium"><Upload size={14} /> Import</h2>
-            <button className="rounded bg-zinc-800 px-3 py-1.5 hover:bg-zinc-700" onClick={doImport}>
+            <button
+              className="rounded bg-zinc-800 px-3 py-1.5 hover:bg-zinc-700 disabled:opacity-40"
+              disabled={!writable}
+              title={writable ? undefined : writeTip}
+              onClick={doImport}
+            >
               Choose file (.bson / .json / .jsonl)…
             </button>
             {importProgress !== null && (
@@ -521,11 +544,12 @@ export default function DocumentBrowser({ coll }: { coll: string }) {
 }
 
 function IndexesTab({
-  connId, coll, indexes, onChanged,
+  connId, coll, indexes, writable, onChanged,
 }: {
   connId: number;
   coll: string;
   indexes: string[];
+  writable: boolean;
   onChanged: () => void;
 }) {
   const [field, setField] = useState('');
@@ -569,7 +593,7 @@ function IndexesTab({
             <tr key={f} className="border-b border-zinc-900">
               <td className="py-1.5 font-mono">{f}</td>
               <td className="py-1.5 text-right">
-                {f !== '_id' && (
+                {f !== '_id' && writable && (
                   <button className="text-zinc-500 hover:text-red-400" onClick={() => setDropTarget(f)}>
                     <Trash2 size={13} />
                   </button>
@@ -579,18 +603,22 @@ function IndexesTab({
           ))}
         </tbody>
       </table>
-      <div className="flex max-w-md gap-2">
-        <input
-          className="flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5"
-          placeholder="field name (dotted paths allowed)"
-          value={field}
-          onChange={(e) => setField(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && create()}
-        />
-        <button className="rounded bg-amber-600 px-3 py-1.5 hover:bg-amber-500" onClick={create}>
-          Create index
-        </button>
-      </div>
+      {writable ? (
+        <div className="flex max-w-md gap-2">
+          <input
+            className="flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5"
+            placeholder="field name (dotted paths allowed)"
+            value={field}
+            onChange={(e) => setField(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && create()}
+          />
+          <button className="rounded bg-amber-600 px-3 py-1.5 hover:bg-amber-500" onClick={create}>
+            Create index
+          </button>
+        </div>
+      ) : (
+        <p className="text-xs text-zinc-500">Read-only — index changes require write access.</p>
+      )}
       <Modal open={dropTarget !== null} title={`Drop index on "${dropTarget}"?`} onClose={() => setDropTarget(null)}>
         <button className="rounded bg-red-700 px-3 py-1.5 text-sm hover:bg-red-600" onClick={drop}>
           Drop index

@@ -17,6 +17,7 @@
  */
 import { invoke } from '@tauri-apps/api/core';
 import type {
+  AuthInfo,
   BsonDocument,
   ConnectionInfo,
   DbStats,
@@ -24,6 +25,8 @@ import type {
   ExportFormat,
   FindResult,
   ImportSummary,
+  TlsOptions,
+  UserRow,
 } from './types';
 
 function requireNonEmpty(value: string, what: string): void {
@@ -41,18 +44,68 @@ function requireValidJson(text: string, what: string): void {
 }
 
 export const api = {
-  connectRemote: (host: string, port: number): Promise<ConnectionInfo> => {
+  connectRemote: (host: string, port: number, tls?: TlsOptions): Promise<ConnectionInfo> => {
     requireNonEmpty(host, 'host');
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
       throw new Error('port must be an integer in 1..65535');
     }
-    return invoke('connect_remote', { host, port });
+    if (tls?.enabled && tls.mode === 'pin' && !/^[0-9a-fA-F:]{64,}$/.test(tls.pin ?? '')) {
+      throw new Error('pin must be a 64-character SHA-256 hex fingerprint');
+    }
+    return invoke('connect_remote', { host, port, tls: tls ?? null });
   },
   openLocal: (path: string, createIfMissing: boolean): Promise<ConnectionInfo> => {
     requireNonEmpty(path, 'path');
     return invoke('open_local', { path, createIfMissing });
   },
   disconnect: (connId: number): Promise<void> => invoke('disconnect', { connId }),
+
+  // ── authentication & user management ──────────────────────────────────────
+  authenticate: (connId: number, username: string, password: string): Promise<AuthInfo> => {
+    requireNonEmpty(username, 'username');
+    requireNonEmpty(password, 'password');
+    return invoke('authenticate', { connId, username, password });
+  },
+  bootstrapAdmin: (
+    connId: number,
+    bootstrapToken: string,
+    username: string,
+    password: string,
+  ): Promise<AuthInfo> => {
+    requireNonEmpty(bootstrapToken, 'bootstrap token');
+    requireNonEmpty(username, 'username');
+    requireNonEmpty(password, 'password');
+    return invoke('bootstrap_admin', { connId, bootstrapToken, username, password });
+  },
+  logout: (connId: number): Promise<void> => invoke('logout', { connId }),
+  listUsers: (connId: number): Promise<UserRow[]> => invoke('list_users', { connId }),
+  createUser: (
+    connId: number,
+    username: string,
+    password: string,
+    roles: string[],
+  ): Promise<void> => {
+    requireNonEmpty(username, 'username');
+    requireNonEmpty(password, 'password');
+    if (roles.length === 0) throw new Error('select at least one role');
+    return invoke('create_user', { connId, username, password, roles });
+  },
+  dropUser: (connId: number, username: string): Promise<boolean> =>
+    invoke('drop_user', { connId, username }),
+  changePassword: (
+    connId: number,
+    newPassword: string,
+    oldPassword?: string,
+    username?: string,
+  ): Promise<void> => {
+    requireNonEmpty(newPassword, 'new password');
+    return invoke('change_password', {
+      connId,
+      newPassword,
+      oldPassword: oldPassword ?? null,
+      username: username ?? null,
+    });
+  },
 
   listCollections: (connId: number): Promise<string[]> =>
     invoke('list_collections', { connId }),
